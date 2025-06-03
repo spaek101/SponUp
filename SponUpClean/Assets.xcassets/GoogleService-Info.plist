@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyC7DlVK8Gt1EZk_Rw04J8tMG_m94qQDdVg</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1007155814400</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>steve.sponup</string>
+	<key>PROJECT_ID</key>
+	<string>sponup-2784a</string>
+	<key>STORAGE_BUCKET</key>
+	<string>sponup-2784a.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1007155814400:ios:47e3b3af48f4ffd9f4b8e5</string>
+</dict>
+</plist>
