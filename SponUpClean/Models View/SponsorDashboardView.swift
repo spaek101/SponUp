@@ -12,76 +12,14 @@ struct SponsorDashboardView: View {
     @AppStorage("userRole") var userRole: String = ""
     @State private var isSignedOut = false
 
-    @State private var openChallenges = 0
-    @State private var closedChallenges = 0
     @State private var pendingCount = 0
-    @State private var rejectedCount = 0
-    @State private var approvedCount = 0
-    @State private var rewardedCount = 0
     @State private var hasPendingAthletes = false
-
-    @State private var isSummaryExpanded = false
 
     var body: some View {
         NavigationStack {
             VStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-
-                        // MARK: - Summary Section
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 8) {
-                                Button(action: {
-                                    withAnimation { isSummaryExpanded.toggle() }
-                                }) {
-                                    Image(systemName: isSummaryExpanded ? "minus" : "plus")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white)
-                                        .padding(6)
-                                        .background(Color.black)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                }
-
-                                Text("My Summary")
-                                    .font(.headline)
-                                    .bold()
-
-                                Spacer()
-                            }
-
-                            if isSummaryExpanded {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Total Challenges").font(.subheadline).bold()
-                                        HStack(spacing: 20) {
-                                            Label("Open: \(openChallenges)", systemImage: "play.circle.fill")
-                                                .font(.subheadline).foregroundColor(.green)
-                                            Label("Closed: \(closedChallenges)", systemImage: "xmark.circle.fill")
-                                                .font(.subheadline).foregroundColor(.gray)
-                                        }
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Submission Status").font(.subheadline).bold()
-                                        HStack(spacing: 20) {
-                                            Label("Pending: \(pendingCount)", systemImage: "clock.fill")
-                                                .font(.subheadline).foregroundColor(.orange)
-                                            Label("Rejected: \(rejectedCount)", systemImage: "xmark.seal.fill")
-                                                .font(.subheadline).foregroundColor(.red)
-                                        }
-
-                                        HStack(spacing: 20) {
-                                            Label("Approved: \(approvedCount)", systemImage: "checkmark.seal.fill")
-                                                .font(.subheadline).foregroundColor(.blue)
-                                            Label("Rewarded: \(rewardedCount)", systemImage: "gift.fill")
-                                                .font(.subheadline).foregroundColor(.purple)
-                                        }
-                                    }
-                                }
-                                .transition(.opacity)
-                            }
-                        }
-                        .padding(.horizontal)
 
                         // MARK: - Buttons
                         VStack(spacing: 12) {
@@ -242,7 +180,6 @@ struct SponsorDashboardView: View {
             let athleteIDs = data["sponsoredAthletes"] as? [String] ?? []
             let pendingIDs = data["pendingAthletes"] as? [String] ?? []
 
-            // Filter out pending IDs that are already approved
             let actualPendingIDs = pendingIDs.filter { !athleteIDs.contains($0) }
             self.hasPendingAthletes = !actualPendingIDs.isEmpty
 
@@ -280,12 +217,7 @@ struct SponsorDashboardView: View {
                     return
                 }
 
-                let allChallenges = snapshot?.documents.compactMap { try? $0.data(as: Challenge.self) } ?? []
-                self.challenges = allChallenges
-
-                let now = Date()
-                self.openChallenges = allChallenges.filter { $0.endDate > now }.count
-                self.closedChallenges = allChallenges.filter { $0.endDate <= now }.count
+                self.challenges = snapshot?.documents.compactMap { try? $0.data(as: Challenge.self) } ?? []
             }
     }
 
@@ -313,9 +245,6 @@ struct SponsorDashboardView: View {
 
                         let submissions = subSnapshot?.documents ?? []
                         self.pendingCount = submissions.filter { $0["status"] as? String == "Pending" }.count
-                        self.rejectedCount = submissions.filter { $0["status"] as? String == "Rejected" }.count
-                        self.approvedCount = submissions.filter { $0["status"] as? String == "Approved" }.count
-                        self.rewardedCount = submissions.filter { $0["status"] as? String == "Rewarded" }.count
                     }
             }
     }

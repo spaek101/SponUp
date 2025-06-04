@@ -16,13 +16,13 @@ struct ChallengeOptionsView: View {
 
             // Challenge Cards
             NavigationLink(destination: CreateChallengeView(sponsoredAthletes: $sponsoredAthletes, challenges: $challenges)) {
-                CustomDashboardCardView(title: "Create My Challenge", systemImage: "plus.circle.fill")
+                CustomDashboardCardView(title: "Create My Own Challenge", systemImage: "plus.circle.fill")
             }
             .buttonStyle(PlainButtonStyle())
             .frame(maxWidth: .infinity)
 
             NavigationLink(destination: ViewScheduleView(sponsoredAthletes: $sponsoredAthletes, challenges: $challenges)) {
-                CustomDashboardCardView(title: "View Athlete's Event", systemImage: "calendar.circle.fill")
+                CustomDashboardCardView(title: "View Athlete's Schedule", systemImage: "calendar.circle.fill")
             }
             .buttonStyle(PlainButtonStyle())
             .frame(maxWidth: .infinity)

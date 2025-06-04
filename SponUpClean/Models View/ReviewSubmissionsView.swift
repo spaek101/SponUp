@@ -232,13 +232,19 @@ struct ReviewSubmissionsView: View {
         let gracePeriod: TimeInterval = 5 * 24 * 60 * 60 // 5 days in seconds
 
         filteredOpenSubmissions = challengeSubmissions.filter { challenge in
+            let hasUnfinished = challenge.submissions.contains {
+                let status = $0.status.lowercased()
+                return status == "pending" || status == "approved" || status == "rejected"
+            }
             let cutoffDate = challenge.endDate.addingTimeInterval(gracePeriod)
-            return cutoffDate > currentDate
+            return hasUnfinished || cutoffDate > currentDate
         }
 
         filteredPastSubmissions = challengeSubmissions.filter { challenge in
+            let allRewarded = !challenge.submissions.isEmpty &&
+                challenge.submissions.allSatisfy { $0.status.lowercased() == "rewarded" }
             let cutoffDate = challenge.endDate.addingTimeInterval(gracePeriod)
-            return cutoffDate <= currentDate
+            return allRewarded && cutoffDate <= currentDate
         }
 
         print("🧪 filterSubmissions - total open: \(filteredOpenSubmissions.count), total past: \(filteredPastSubmissions.count)")

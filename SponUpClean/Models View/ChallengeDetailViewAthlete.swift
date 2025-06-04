@@ -43,7 +43,7 @@ struct ChallengeDetailViewAthlete: View {
                 }
 
                 if let reward = challenge.reward, !reward.isEmpty {
-                    Text("Reward: \(reward)")
+                    Text("🏆 Reward: \(reward)")
                         .font(.body)
                         .foregroundColor(.black)
                 }
@@ -53,12 +53,23 @@ struct ChallengeDetailViewAthlete: View {
                 Text("End: \(challenge.endDate.formatted(date: .abbreviated, time: .omitted))")
 
                 if submissionStatus?.lowercased() != "rewarded" {
-                    Text("Time Left: \(timeRemaining(to: challenge.endDate))").foregroundColor(.red)
+                    Text("Submission Deadline: \(timeRemaining(to: challenge.endDate))").foregroundColor(.red)
                 }
 
                 if let status = submissionStatus {
                     Text("Status: \(status.capitalized)").foregroundColor(color(for: status)).bold()
                 }
+
+                if !hasChallengeStarted {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.gray)
+                        Text("You cannot submit until the challenge starts.")
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                    }
+                }
+
 
                 Divider()
 
@@ -72,11 +83,10 @@ struct ChallengeDetailViewAthlete: View {
                     }
                 }
 
-
                 if !selectedImages.isEmpty {
                     VStack {
                         TabView(selection: $currentImageIndex) {
-                            ForEach(selectedImages.indices, id: \ .self) { index in
+                            ForEach(selectedImages.indices, id: \.self) { index in
                                 Image(uiImage: selectedImages[index])
                                     .resizable()
                                     .scaledToFit()
@@ -89,7 +99,7 @@ struct ChallengeDetailViewAthlete: View {
                         .frame(height: 250)
 
                         HStack(spacing: 6) {
-                            ForEach(selectedImages.indices, id: \ .self) { index in
+                            ForEach(selectedImages.indices, id: \.self) { index in
                                 Circle()
                                     .fill(index == currentImageIndex ? Color.primary : Color.secondary.opacity(0.3))
                                     .frame(width: 8, height: 8)
@@ -110,14 +120,14 @@ struct ChallengeDetailViewAthlete: View {
                         matching: .images,
                         photoLibrary: .shared()
                     ) {
-                        Text("Select Images")
+                        Text("Upload Results")
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(isChallengeExpired ? Color.gray : Color.blue)
+                            .background(isChallengeExpired || !hasChallengeStarted ? Color.gray : Color.blue)
                             .foregroundColor(.white)
                             .cornerRadius(8)
                     }
-                    .disabled(isChallengeExpired)
+                    .disabled(isChallengeExpired || !hasChallengeStarted)
                     .onChange(of: selectedPhotoItems) { _, newItems in
                         Task {
                             selectedImages.removeAll()
@@ -135,10 +145,10 @@ struct ChallengeDetailViewAthlete: View {
                     Button("Next") {
                         showDeliveryForm = true
                     }
-                    .disabled(selectedImages.isEmpty || !canSubmit)
+                    .disabled(selectedImages.isEmpty || !canSubmit || !hasChallengeStarted)
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background((selectedImages.isEmpty || !canSubmit) ? Color.gray : Color.orange)
+                    .background((selectedImages.isEmpty || !canSubmit || !hasChallengeStarted) ? Color.gray : Color.orange)
                     .foregroundColor(.white)
                     .cornerRadius(8)
                 }
@@ -198,6 +208,12 @@ struct ChallengeDetailViewAthlete: View {
         }
     }
 
+    // MARK: - Computed properties
+
+    private var hasChallengeStarted: Bool {
+        return Date() >= challenge.startDate
+    }
+
     private var canSubmit: Bool {
         let expired = isChallengeExpired
         guard let status = submissionStatus?.lowercased() else { return true }
@@ -229,6 +245,8 @@ struct ChallengeDetailViewAthlete: View {
         }
     }
 
+    // MARK: - Firestore Methods
+
     private func fetchSubmission() {
         guard let athleteID = Auth.auth().currentUser?.uid,
               let challengeID = challenge.id else { return }
@@ -256,7 +274,6 @@ struct ChallengeDetailViewAthlete: View {
                     if let urls = data["imageURLs"] as? [String] {
                         Task {
                             var uiImages: [UIImage] = []
-
                             for urlString in urls {
                                 if let url = URL(string: urlString) {
                                     do {
@@ -269,12 +286,10 @@ struct ChallengeDetailViewAthlete: View {
                                     }
                                 }
                             }
-
                             self.selectedImages = uiImages
                             self.currentImageIndex = 0
                         }
                     }
-
                 }
             }
     }

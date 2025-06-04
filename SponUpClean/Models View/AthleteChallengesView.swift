@@ -12,7 +12,6 @@ struct AthleteChallengesView: View {
     @State private var submissionStatuses: [String: String] = [:]
     @State private var sponsorNames: [String: String] = [:]
     @State private var sponsorImages: [String: String] = [:]
-    @State private var selectedRetailerIndex = 0
     @State private var selectedChallenge: Challenge?
     @State private var showExpired = false
     @State private var viewedChallengeIDs: Set<String> = []
@@ -23,48 +22,11 @@ struct AthleteChallengesView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
 
-                        if !showExpired && !currentRetailerChallenges.isEmpty {
-                            Text("By Retailer")
-                                .font(.subheadline)
-                                .bold()
-                                .padding(.horizontal)
-
-                            TabView(selection: $selectedRetailerIndex) {
-                                ForEach(currentRetailerChallenges.indices, id: \.self) { index in
-                                    let challenge = currentRetailerChallenges[index]
-                                    RetailerChallengeCardView(
-                                        challenge: challenge,
-                                        status: submissionStatuses[challenge.id ?? ""]
-                                    )
-                                    .frame(width: UIScreen.main.bounds.width - 32, height: 240)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        selectedChallenge = challenge
-                                    }
-                                    .tag(index)
-                                }
-                            }
-                            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                            .frame(height: 260)
-                            .padding(.top, -10)
-
-                            HStack(spacing: 8) {
-                                ForEach(currentRetailerChallenges.indices, id: \.self) { index in
-                                    Circle()
-                                        .fill(index == selectedRetailerIndex ? Color.black : Color.gray.opacity(0.4))
-                                        .frame(width: 10, height: 10)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, -12)
-                        }
+                        
 
                         Divider().padding(.top)
 
-                        Text("By Sponsor")
-                            .font(.subheadline)
-                            .bold()
-                            .padding(.horizontal)
+                        
 
                         sponsorChallengeListView(challenges: showExpired ? expiredSponsorChallenges : currentSponsorChallenges)
                             .id(showExpired)
@@ -135,16 +97,33 @@ struct AthleteChallengesView: View {
                                 .font(.headline)
                                 .foregroundColor(.black)
 
-                            HStack {
-                                Text(sponsorNames[challenge.createdBy] ?? "Loading...")
+                            Text(sponsorNames[challenge.createdBy] ?? "Loading...")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+
+
+                            let timeText = timeRemaining(challenge)
+                            Text(timeText)
+                                .font(.caption)
+                                .foregroundColor(
+                                    timeText.starts(with: "Deadline") ? .red :
+                                    timeText == "In progress..." ? .green :
+                                    .gray
+                                )
+
+
+                            .font(.caption)
+                            .labelStyle(.titleAndIcon)
+
+
+
+                            if let status = submissionStatuses[challenge.id ?? ""] {
+                                Text(status)
                                     .font(.caption)
-                                    .foregroundColor(.gray)
-                                Spacer()
-                                Text("⏳ \(timeRemaining(challenge))")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(colorForStatus(status))
                             }
                         }
+
 
                         Spacer()
 
@@ -255,17 +234,22 @@ struct AthleteChallengesView: View {
     }
 
     private func timeRemaining(_ challenge: Challenge) -> String {
-        let adjusted = Calendar.current.date(byAdding: .day, value: 5, to: challenge.endDate)!
         let now = Date()
-        if adjusted <= now {
+        let fiveDayGrace = Calendar.current.date(byAdding: .day, value: 5, to: challenge.endDate)!
+        
+        if now < challenge.startDate {
+            let diff = Calendar.current.dateComponents([.day, .hour, .minute], from: now, to: challenge.startDate)
+            return "Starts in: \(diff.day ?? 0)d \(diff.hour ?? 0)h \(diff.minute ?? 0)m"
+        } else if now >= challenge.startDate && now <= challenge.endDate {
+            return "In progress..."
+        } else if now > challenge.endDate && now <= fiveDayGrace {
+            let diff = Calendar.current.dateComponents([.day, .hour, .minute], from: now, to: fiveDayGrace)
+            return "Deadline: \(diff.day ?? 0)d \(diff.hour ?? 0)h \(diff.minute ?? 0)m"
+        } else {
             return "Expired"
         }
-        let diff = Calendar.current.dateComponents([.day, .hour, .minute], from: now, to: adjusted)
-        let days = diff.day ?? 0
-        let hours = diff.hour ?? 0
-        let minutes = diff.minute ?? 0
-        return "\(days)d \(hours)h \(minutes)m"
     }
+
 
     private var currentChallenges: [Challenge] {
         let now = Date()
@@ -281,11 +265,7 @@ struct AthleteChallengesView: View {
             .sorted { $0.endDate > $1.endDate }
     }
 
-    private var currentRetailerChallenges: [Challenge] {
-        currentChallenges
-            .filter { $0.type == "retailer" }
-            .sorted { $0.startDate > $1.startDate }
-    }
+    
 
     private var currentSponsorChallenges: [Challenge] {
         currentChallenges
@@ -295,6 +275,15 @@ struct AthleteChallengesView: View {
 
     private var expiredSponsorChallenges: [Challenge] {
         expiredChallenges.filter { $0.type != "retailer" }
+    }
+}
+    private func colorForStatus(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "approved": return .green
+        case "rewarded": return .green
+        case "rejected": return .red
+        case "pending": return .orange
+        default: return .gray
     }
 }
 

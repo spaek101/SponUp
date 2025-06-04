@@ -3,6 +3,8 @@ import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
 import PhotosUI
+import CoreImage.CIFilterBuiltins
+import AVFoundation
 
 struct SponsorProfileView: View {
     @Environment(\.dismiss) private var dismiss
@@ -17,95 +19,116 @@ struct SponsorProfileView: View {
     @State private var profileImageURL: String = ""
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showToast = false
+    @State private var toastMessage = ""
 
     @AppStorage("userID") var userID: String = ""
     @AppStorage("userRole") var userRole: String = ""
 
+    let context = CIContext()
+    let filter = CIFilter.qrCodeGenerator()
+    @State private var qrImage: UIImage?
+    @State private var showShareSheet = false
+    @State private var showScanner = false
+    @State private var scannedUserID: String?
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Profile Image & Name
                 VStack(spacing: 8) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         ZStack(alignment: .bottomTrailing) {
                             AsyncImage(url: URL(string: profileImageURL)) { phase in
                                 switch phase {
                                 case .empty:
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 100, height: 100)
-                                        .foregroundColor(.gray)
+                                    ProgressView().frame(width: 100, height: 100)
                                 case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .clipShape(Circle())
+                                    image.resizable().scaledToFill().frame(width: 100, height: 100).clipShape(Circle())
                                 case .failure:
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 100, height: 100)
-                                        .foregroundColor(.gray)
+                                    Image(systemName: "person.circle.fill").resizable().scaledToFit().frame(width: 100, height: 100).foregroundColor(.gray)
                                 @unknown default:
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 100, height: 100)
-                                        .foregroundColor(.gray)
+                                    EmptyView()
                                 }
                             }
-
                             Circle()
                                 .fill(Color.white)
                                 .frame(width: 28, height: 28)
-                                .overlay(
-                                    Image(systemName: "camera.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.black)
-                                )
+                                .overlay(Image(systemName: "camera.fill").font(.system(size: 14)).foregroundColor(.black))
                                 .offset(x: 4, y: 4)
                         }
                     }
-
-                    Text("\(firstName) \(lastName)")
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    Text("Sponsor")
-                        .foregroundColor(.gray)
-                        .font(.subheadline)
-                }
-                .padding(.top)
+                    Text("\(firstName) \(lastName)").font(.title2).fontWeight(.bold)
+                    Text("Sponsor").foregroundColor(.gray).font(.subheadline)
+                }.padding(.top)
 
                 VStack(spacing: 0) {
-                    SectionHeader(title: "ACCOUNT INFORMATION")
+                    Text("ACCOUNT INFORMATION")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding([.horizontal, .bottom], 12)
 
                     InfoRow(title: "Email", value: email)
                     Divider()
-                    InfoRow(title: "User ID", value: id, copyable: true)
+                    InfoRow(title: "User ID", value: id, copyable: true, onCopy: {
+                        UIPasteboard.general.string = id
+                        toastMessage = "Copied!"
+                        withAnimation { showToast = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            withAnimation { showToast = false }
+                        }
+                    })
                 }
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6)))
                 .padding(.horizontal)
 
-                if isEditing {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Edit Information")
-                            .font(.headline)
+                if let qr = generateQRCode(from: id), !id.isEmpty {
+                    VStack(spacing: 12) {
+                        Text("Share Your Profile").font(.headline)
+                        Image(uiImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 200, height: 200)
 
                         HStack(spacing: 12) {
-                            TextField("First Name", text: $firstName)
-                                .padding()
-                                .background(Color(.systemGray5))
-                                .cornerRadius(10)
+                            Button(action: {
+                                qrImage = qr
+                                showShareSheet = true
+                            }) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 12)
+                                    .background(Color.black)
+                                    .cornerRadius(10)
+                            }
 
-                            TextField("Last Name", text: $lastName)
-                                .padding()
-                                .background(Color(.systemGray5))
-                                .cornerRadius(10)
+                            Button(action: {
+                                showScanner = true
+                            }) {
+                                Label("Scan", systemImage: "qrcode.viewfinder")
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.black, lineWidth: 1)
+                                    )
+                            }
                         }
+                    }.padding()
+                }
 
+                if isEditing {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Edit Information").font(.headline)
+                        HStack(spacing: 12) {
+                            TextField("First Name", text: $firstName)
+                                .padding().background(Color(.systemGray5)).cornerRadius(10)
+                            TextField("Last Name", text: $lastName)
+                                .padding().background(Color(.systemGray5)).cornerRadius(10)
+                        }
                         Button(action: saveProfileChanges) {
                             Text("Save Changes")
                                 .foregroundColor(.white)
@@ -116,43 +139,67 @@ struct SponsorProfileView: View {
                                 .cornerRadius(12)
                         }
                         .disabled(!isFormChanged())
-                    }
-                    .padding(.horizontal)
+                    }.padding(.horizontal)
                 }
 
-                Button(action: {
-                    isEditing.toggle()
-                }) {
+                Button(action: { isEditing.toggle() }) {
                     Label(isEditing ? "Cancel Editing" : "Edit Profile", systemImage: "pencil")
                         .foregroundColor(.blue)
                 }
-                .padding(.top, 8)
 
                 Spacer()
+            }.padding(.vertical)
+        }
+        .onChange(of: selectedPhoto) { _ in handlePhotoSelection() }
+        .onAppear { loadUserData() }
+        .sheet(isPresented: $showShareSheet) {
+            if let qrImage = qrImage {
+                ShareSheet(activityItems: [qrImage])
             }
-            .padding(.vertical)
         }
-        .onChange(of: selectedPhoto) { _ in
-            handlePhotoSelection()
-        }
-        .onAppear {
-            loadUserData()
+        .sheet(isPresented: $showScanner) {
+            QRCodeScannerView { scannedID in
+                showScanner = false
+                scannedUserID = scannedID
+                handleScannedID(scannedID)
+            }
         }
         .overlay(
             Group {
                 if showToast {
-                    Text("✅ Profile photo updated!")
+                    Text(toastMessage)
                         .font(.subheadline)
-                        .padding()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
                         .background(Color.black.opacity(0.85))
                         .foregroundColor(.white)
                         .cornerRadius(10)
-                        .transition(.opacity)
-                        .padding(.bottom, 50)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(.easeInOut(duration: 0.3), value: showToast)
+                        .padding(.bottom, 40)
                 }
             },
             alignment: .bottom
         )
+    }
+
+    private func generateQRCode(from string: String) -> UIImage? {
+        filter.message = Data(string.utf8)
+        if let outputImage = filter.outputImage {
+            let scaled = outputImage.transformed(by: CGAffineTransform(scaleX: 20, y: 20))
+            if let cgimg = context.createCGImage(scaled, from: scaled.extent) {
+                return UIImage(cgImage: cgimg)
+            }
+        }
+        return nil
+    }
+
+    private func handleScannedID(_ scannedID: String) {
+        toastMessage = "Scanned ID: \(scannedID)"
+        withAnimation { showToast = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation { showToast = false }
+        }
     }
 
     private func handlePhotoSelection() {
@@ -174,23 +221,26 @@ struct SponsorProfileView: View {
     private func uploadProfileImage(_ image: UIImage) {
         guard let uid = Auth.auth().currentUser?.uid,
               let imageData = image.jpegData(compressionQuality: 0.8) else { return }
-
         let ref = Storage.storage().reference().child("profileImages/\(uid)/profile.jpg")
         ref.putData(imageData) { _, error in
             if let error = error {
                 print("❌ Upload failed: \(error.localizedDescription)")
                 return
             }
-
             ref.downloadURL { url, _ in
                 if let url = url {
                     profileImageURL = url.absoluteString
                     Firestore.firestore().collection("users").document(uid).updateData([
                         "profileImageURL": profileImageURL
                     ]) { _ in
-                        showToast = true
+                        toastMessage = "✅ Profile photo updated!"
+                        withAnimation {
+                            showToast = true
+                        }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                            showToast = false
+                            withAnimation {
+                                showToast = false
+                            }
                         }
                     }
                 }
@@ -200,25 +250,19 @@ struct SponsorProfileView: View {
 
     private func loadUserData() {
         guard let user = Auth.auth().currentUser else { return }
-
         email = user.email ?? "No email found"
         id = user.uid
-
         Firestore.firestore().collection("users").document(user.uid).getDocument { doc, _ in
             if let data = doc?.data() {
-                firstName = data["firstName"] as? String ?? ""
-                lastName = data["lastName"] as? String ?? ""
                 profileImageURL = data["profileImageURL"] as? String ?? ""
-
-                originalFirstName = firstName
-                originalLastName = lastName
+                originalFirstName = data["firstName"] as? String ?? ""
+                originalLastName = data["lastName"] as? String ?? ""
             }
         }
     }
 
     private func saveProfileChanges() {
         guard let user = Auth.auth().currentUser else { return }
-
         Firestore.firestore().collection("users").document(user.uid).updateData([
             "firstName": firstName,
             "lastName": lastName
@@ -235,4 +279,3 @@ struct SponsorProfileView: View {
         firstName != originalFirstName || lastName != originalLastName
     }
 }
-

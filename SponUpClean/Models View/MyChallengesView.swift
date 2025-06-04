@@ -54,23 +54,25 @@ struct MyChallengesView: View {
                                         VStack(alignment: .leading, spacing: 6) {
                                             Text(challenge.title)
                                                 .font(.headline)
-                                                .foregroundColor(.blue)
+                                                .foregroundColor(.black)
 
-                                            Text("🏆 \(challenge.reward)")
+                                            Text("Reward: \(challenge.reward ?? "")")
+
                                                 .font(.subheadline)
 
-                                            Text("📋 Achievements: \(challenge.achievements.map { "\($0.quantity)x \($0.type)" }.joined(separator: ", "))")
-                                                .font(.footnote)
-
-                                            Text("📅 Assigned to: \(challenge.assignedAthletes.count) athletes")
+                                            Text(assignedToText(for: challenge))
                                                 .font(.footnote)
                                                 .foregroundColor(.gray)
 
-                                            Text("⏳ Time Left: \(remainingTimes[challenge.id ?? ""] ?? "Calculating...")")
-                                                .font(.subheadline)
-                                                .foregroundColor(.red)
+                                            HStack {
+                                                Text("Time Left: \(remainingTimes[challenge.id ?? ""] ?? "Calculating...")")
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.red)
+                                                Spacer() // Pushes content left
+                                            }
                                         }
                                         .padding(.vertical, 4)
+
                                     }
                                 }
                             }
@@ -95,6 +97,19 @@ struct MyChallengesView: View {
             .onDisappear {
                 invalidateTimers()
             }
+        }
+    }
+
+    func assignedToText(for challenge: Challenge) -> String {
+        let count = challenge.assignedAthletes.count
+        guard count > 0 else { return "Assigned to: None" }
+
+        let firstAthleteLabel = "Athlete"
+        
+        if count == 1 {
+            return "Assigned to: \(firstAthleteLabel)"
+        } else {
+            return "Assigned to: \(firstAthleteLabel) +\(count - 1) athlete\(count - 1 > 1 ? "s" : "")"
         }
     }
 

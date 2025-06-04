@@ -33,11 +33,11 @@ struct ChallengeSubmissionsDetailView: View {
                     .font(.title)
                     .bold()
 
-                Text("🏆 Reward: \(challenge.reward)")
-                Text("📆 Start: \(challenge.startDate.formatted(date: .abbreviated, time: .omitted))")
-                Text("📆 End: \(challenge.endDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("Reward: \(challenge.reward ?? "")")
+                Text("Start: \(challenge.startDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("End: \(challenge.endDate.formatted(date: .abbreviated, time: .omitted))")
 
-                Text("📋 Achievements required:")
+                Text("Achievements required:")
                     .font(.headline)
 
                 ForEach(challenge.achievements, id: \.self) { achievement in
@@ -46,7 +46,7 @@ struct ChallengeSubmissionsDetailView: View {
 
                 Divider()
 
-                Text("📸 Submission Status")
+                Text("Submission Status")
                     .font(.title3)
                     .bold()
 
@@ -169,7 +169,8 @@ struct AchievementText: View {
 
     var body: some View {
         let description = descriptions[achievement.type] ?? ""
-        Text("- \(achievement.quantity)x \(achievement.type)\(description.isEmpty ? "" : " (\(description))")")
+        Text("• \(achievement.type)")
             .font(.subheadline)
+
     }
 }

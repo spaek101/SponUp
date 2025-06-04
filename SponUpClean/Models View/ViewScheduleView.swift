@@ -42,16 +42,16 @@ struct ViewScheduleView: View {
                                     Text("\(pair.athlete.firstName) \(pair.athlete.lastName)")
                                         .font(.headline)
 
-                                    Text("🏷️ \(pair.event.eventTitle)")
+                                    Text("\(pair.event.eventTitle)")
                                         .font(.subheadline)
 
-                                    Text("📅 Start: \(pair.event.startDate, formatter: dateFormatter)")
+                                    Text("Start: \(pair.event.startDate, formatter: dateFormatter)")
                                         .font(.footnote)
 
-                                    Text("📅 End: \(pair.event.endDate, formatter: dateFormatter)")
+                                    Text("End: \(pair.event.endDate, formatter: dateFormatter)")
                                         .font(.footnote)
 
-                                    Text("🎯 Challenges created: \(countChallenges(for: pair.event))")
+                                    Text("Challenges created: \(countChallenges(for: pair.event))")
                                         .font(.footnote)
                                         .foregroundColor(.blue)
                                         .padding(.top, 4)
@@ -81,16 +81,16 @@ struct ViewScheduleView: View {
                                 Text("\(pair.athlete.firstName) \(pair.athlete.lastName)")
                                     .font(.headline)
 
-                                Text("🏷️ \(pair.event.eventTitle)")
+                                Text("\(pair.event.eventTitle)")
                                     .font(.subheadline)
 
-                                Text("📅 Start: \(pair.event.startDate, formatter: dateFormatter)")
+                                Text("Start: \(pair.event.startDate, formatter: dateFormatter)")
                                     .font(.footnote)
 
-                                Text("📅 End: \(pair.event.endDate, formatter: dateFormatter)")
+                                Text("End: \(pair.event.endDate, formatter: dateFormatter)")
                                     .font(.footnote)
 
-                                Text("🎯 Challenges created: \(countChallenges(for: pair.event))")
+                                Text("Challenges created: \(countChallenges(for: pair.event))")
                                     .font(.footnote)
                                     .foregroundColor(.blue)
                                     .padding(.top, 4)

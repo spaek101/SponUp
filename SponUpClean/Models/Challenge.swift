@@ -45,6 +45,7 @@ struct Challenge: Identifiable, Codable, Hashable, Equatable {
 
     // Local-only field
     var submissions: [Submission] = []                    // not decoded from Firestore
+    
 
     enum CodingKeys: String, CodingKey {
         case id
