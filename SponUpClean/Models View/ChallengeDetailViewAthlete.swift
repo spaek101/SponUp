@@ -17,13 +17,11 @@ struct ChallengeDetailViewAthlete: View {
     @State private var sponsorName: String = ""
     @State private var currentImageIndex: Int = 0
 
-    // Delivery Info (input)
     @State private var showDeliveryForm = false
     @State private var email: String = ""
     @State private var shippingAddress: String = ""
     @State private var deliveryValidationFailed = false
 
-    // Delivery Info (from reward)
     @State private var deliveryMethod: String = ""
     @State private var redemptionCode: String = ""
     @State private var trackingNumber: String = ""
@@ -33,171 +31,185 @@ struct ChallengeDetailViewAthlete: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(challenge.title).font(.title).bold()
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(challenge.title)
+                        .font(.title.bold())
 
-                if !sponsorName.isEmpty {
-                    Text("Sponsored by: \(sponsorName)")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-
-                if let reward = challenge.reward, !reward.isEmpty {
-                    Text("🏆 Reward: \(reward)")
-                        .font(.body)
-                        .foregroundColor(.black)
-                }
-
-                Text("Challenge: \(challenge.achievements.map { $0.type }.joined(separator: ", "))")
-                Text("Start: \(challenge.startDate.formatted(date: .abbreviated, time: .omitted))")
-                Text("End: \(challenge.endDate.formatted(date: .abbreviated, time: .omitted))")
-
-                if submissionStatus?.lowercased() != "rewarded" {
-                    Text("Submission Deadline: \(timeRemaining(to: challenge.endDate))").foregroundColor(.red)
-                }
-
-                if let status = submissionStatus {
-                    Text("Status: \(status.capitalized)").foregroundColor(color(for: status)).bold()
-                }
-
-                if !hasChallengeStarted {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.gray)
-                        Text("You cannot submit until the challenge starts.")
-                            .font(.footnote)
+                    if !sponsorName.isEmpty {
+                        Text("Sponsored by: \(sponsorName)")
+                            .font(.subheadline)
                             .foregroundColor(.gray)
                     }
-                }
 
-
-                Divider()
-
-                if showResultAlreadySubmittedMessage {
-                    if submissionStatus?.lowercased() == "rejected" {
-                        Label("Resubmit results.", systemImage: "arrow.triangle.2.circlepath.circle.fill")
-                            .foregroundColor(.orange)
-                    } else {
-                        Label("Results already submitted.", systemImage: "checkmark.seal.fill")
-                            .foregroundColor(.green)
+                    if let reward = challenge.reward, !reward.isEmpty {
+                        Text("Reward: \(reward)")
+                            .font(.body)
+                            .foregroundColor(.black)
                     }
-                }
 
-                if !selectedImages.isEmpty {
-                    VStack {
-                        TabView(selection: $currentImageIndex) {
-                            ForEach(selectedImages.indices, id: \.self) { index in
-                                Image(uiImage: selectedImages[index])
-                                    .resizable()
-                                    .scaledToFit()
-                                    .cornerRadius(10)
-                                    .padding(.horizontal)
-                                    .tag(index)
-                            }
-                        }
-                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                        .frame(height: 250)
+                    Text("Challenge: \(challenge.achievements.map { $0.type }.joined(separator: ", "))")
+                    Text("Start: \(challenge.startDate.formatted(date: .abbreviated, time: .omitted))")
+                    Text("End: \(challenge.endDate.formatted(date: .abbreviated, time: .omitted))")
 
+                    if submissionStatus?.lowercased() != "rewarded" {
+                        Text("Submission Deadline: \(timeRemaining(to: challenge.endDate))")
+                            .foregroundColor(.red)
+                    }
+
+                    if let status = submissionStatus {
+                        Text("Status: \(status.capitalized)")
+                            .foregroundColor(color(for: status))
+                            .bold()
+                    }
+
+                    if !hasChallengeStarted {
                         HStack(spacing: 6) {
-                            ForEach(selectedImages.indices, id: \.self) { index in
-                                Circle()
-                                    .fill(index == currentImageIndex ? Color.primary : Color.secondary.opacity(0.3))
-                                    .frame(width: 8, height: 8)
-                            }
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.gray)
+                            Text("You cannot submit until the challenge starts.")
+                                .font(.footnote)
+                                .foregroundColor(.gray)
                         }
-                        .padding(.top, 4)
                     }
-                }
 
-                if showSuccessMessage {
-                    Text("✅ Successfully submitted.").foregroundColor(.green)
-                }
+                    Divider()
 
-                if !showDeliveryForm {
-                    PhotosPicker(
-                        selection: $selectedPhotoItems,
-                        maxSelectionCount: 5,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        Text("Upload Results")
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(isChallengeExpired || !hasChallengeStarted ? Color.gray : Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+                    if showResultAlreadySubmittedMessage {
+                        if submissionStatus?.lowercased() == "rejected" {
+                            Label("Resubmit results.", systemImage: "arrow.triangle.2.circlepath.circle.fill")
+                                .foregroundColor(.orange)
+                        } else {
+                            Label("Results already submitted.", systemImage: "checkmark.seal.fill")
+                                .foregroundColor(.green)
+                        }
                     }
-                    .disabled(isChallengeExpired || !hasChallengeStarted)
-                    .onChange(of: selectedPhotoItems) { _, newItems in
-                        Task {
-                            selectedImages.removeAll()
-                            for item in newItems {
-                                if let data = try? await item.loadTransferable(type: Data.self),
-                                   let uiImage = UIImage(data: data) {
-                                    selectedImages.append(uiImage)
+
+                    if !selectedImages.isEmpty {
+                        VStack {
+                            TabView(selection: $currentImageIndex) {
+                                ForEach(selectedImages.indices, id: \.self) { index in
+                                    Image(uiImage: selectedImages[index])
+                                        .resizable()
+                                        .scaledToFit()
+                                        .cornerRadius(10)
+                                        .padding(.horizontal)
+                                        .tag(index)
                                 }
                             }
-                            showResultAlreadySubmittedMessage = false
-                            currentImageIndex = 0
+                            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                            .frame(height: 250)
+
+                            HStack(spacing: 6) {
+                                ForEach(selectedImages.indices, id: \.self) { index in
+                                    Circle()
+                                        .fill(index == currentImageIndex ? Color.primary : Color.secondary.opacity(0.3))
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
                         }
                     }
 
-                    Button("Next") {
-                        showDeliveryForm = true
+                    if showSuccessMessage {
+                        Text("✅ Successfully submitted.").foregroundColor(.green)
                     }
-                    .disabled(selectedImages.isEmpty || !canSubmit || !hasChallengeStarted)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background((selectedImages.isEmpty || !canSubmit || !hasChallengeStarted) ? Color.gray : Color.orange)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+
+                    if !showDeliveryForm {
+                        PhotosPicker(
+                            selection: $selectedPhotoItems,
+                            maxSelectionCount: 5,
+                            matching: .images,
+                            photoLibrary: .shared()
+                        ) {
+                            Text("Upload Results")
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background((isChallengeExpired || !hasChallengeStarted) ? Color.gray.opacity(0.3) : Color.orange)
+                                .foregroundColor(.white)
+                                .cornerRadius(16)
+                        }
+                        .disabled(isChallengeExpired || !hasChallengeStarted)
+                        .onChange(of: selectedPhotoItems) { _, newItems in
+                            Task {
+                                selectedImages.removeAll()
+                                for item in newItems {
+                                    if let data = try? await item.loadTransferable(type: Data.self),
+                                       let uiImage = UIImage(data: data) {
+                                        selectedImages.append(uiImage)
+                                    }
+                                }
+                                showResultAlreadySubmittedMessage = false
+                                currentImageIndex = 0
+                            }
+                        }
+
+                        Button("Next") {
+                            showDeliveryForm = true
+                        }
+                        .disabled(selectedImages.isEmpty || !canSubmit || !hasChallengeStarted)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background((selectedImages.isEmpty || !canSubmit || !hasChallengeStarted) ? Color.gray.opacity(0.3) : Color.black)
+                        .foregroundColor(.white)
+                        .cornerRadius(16)
+                    }
+
+                    if showDeliveryForm {
+                        Divider()
+                        Text("Delivery Info").font(.headline)
+
+                        TextField("Email", text: $email)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
+                            .padding().background(Color.gray.opacity(0.1)).cornerRadius(8)
+
+                        TextField("Shipping Address", text: $shippingAddress)
+                            .padding().background(Color.gray.opacity(0.1)).cornerRadius(8)
+
+                        Button("Submit") {
+                            saveDeliveryInfoAndSubmit()
+                        }
+                        .disabled(email.trimmingCharacters(in: .whitespaces).isEmpty || shippingAddress.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background((email.trimmingCharacters(in: .whitespaces).isEmpty || shippingAddress.trimmingCharacters(in: .whitespaces).isEmpty) ? Color.gray : Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+
+                        if deliveryValidationFailed {
+                            Text("⚠️ Email and shipping address are required.").foregroundColor(.red)
+                        }
+                    }
+
+                    if submissionStatus?.lowercased() == "rewarded" {
+                        Divider()
+                        Text("🎁 Your reward has been shipped!").font(.headline)
+                        Text("Delivery Method: \(deliveryMethod)")
+                        if deliveryMethod == "Digital" {
+                            Text("Redemption Code: \(redemptionCode)")
+                        } else if deliveryMethod == "Physical" {
+                            Text("Tracking #: \(trackingNumber)")
+                            if !carrier.isEmpty { Text("Carrier: \(carrier)") }
+                            Text("Estimated Delivery: \(estimatedDeliveryDate.formatted(.dateTime.month().day().year()))")
+                        } else if deliveryMethod == "Hand-delivered", !notes.isEmpty {
+                            Text("Notes: \(notes)")
+                        }
+                    }
                 }
-
-                if showDeliveryForm {
-                    Divider()
-                    Text("Delivery Info").font(.headline)
-
-                    TextField("Email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                        .padding().background(Color.gray.opacity(0.1)).cornerRadius(8)
-
-                    TextField("Shipping Address", text: $shippingAddress)
-                        .padding().background(Color.gray.opacity(0.1)).cornerRadius(8)
-
-                    Button("Submit") {
-                        saveDeliveryInfoAndSubmit()
-                    }
-                    .disabled(email.trimmingCharacters(in: .whitespaces).isEmpty || shippingAddress.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background((email.trimmingCharacters(in: .whitespaces).isEmpty || shippingAddress.trimmingCharacters(in: .whitespaces).isEmpty) ? Color.gray : Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-
-                    if deliveryValidationFailed {
-                        Text("⚠️ Email and shipping address are required.").foregroundColor(.red)
-                    }
-                }
-
-                if submissionStatus?.lowercased() == "rewarded" {
-                    Divider()
-                    Text("🎁 Your reward has been shipped!").font(.headline)
-                    Text("Delivery Method: \(deliveryMethod)")
-                    if deliveryMethod == "Digital" {
-                        Text("Redemption Code: \(redemptionCode)")
-                    } else if deliveryMethod == "Physical" {
-                        Text("Tracking #: \(trackingNumber)")
-                        if !carrier.isEmpty { Text("Carrier: \(carrier)") }
-                        Text("Estimated Delivery: \(estimatedDeliveryDate.formatted(.dateTime.month().day().year()))")
-                    } else if deliveryMethod == "Hand-delivered", !notes.isEmpty {
-                        Text("Notes: \(notes)")
-                    }
-                }
+                .padding()
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                .padding(.horizontal)
             }
-            .padding()
+            .padding(.vertical)
         }
         .navigationTitle("Challenge Details")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(false)
+
         .onAppear {
             fetchSubmission()
             fetchSponsorName()

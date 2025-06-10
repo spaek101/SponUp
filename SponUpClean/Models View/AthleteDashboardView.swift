@@ -41,6 +41,10 @@ struct AthleteDashboardView: View {
     @State private var selectedEventForEdit: EventItem? = nil
     @State private var isEditingEvent = false
     @State private var eventToEdit: EventItem? = nil
+    @State private var challenges: [Challenge] = []
+    @State private var selectedChallenge: Challenge? = nil
+
+
 
 
 
@@ -58,6 +62,14 @@ struct AthleteDashboardView: View {
         events
             .filter { $0.endDate < Date() }
             .sorted { $0.startDate > $1.startDate }
+    }
+
+    private var filteredChallenges: [Challenge] {
+        let now = Date()
+        return challenges.filter {
+            let isExpired = Calendar.current.date(byAdding: .day, value: 5, to: $0.endDate)! <= now
+            return selectedEventTab == "open" ? !isExpired : isExpired
+        }
     }
 
 
@@ -336,9 +348,113 @@ struct AthleteDashboardView: View {
                                     }
 
                                 case .challenges:
-                                    Text("Your challenges")
-                                        .foregroundColor(.gray)
-                                        .padding(.top)
+                                    VStack(spacing: 16) {
+                                        if let challenge = selectedChallenge {
+                                            // ✅ Show Challenge Detail View Fullscreen in White Area
+                                            HStack {
+                                                Button(action: {
+                                                    selectedChallenge = nil // Go back to list
+                                                }) {
+                                                    Image(systemName: "chevron.left")
+                                                    Text("Back to Challenges")
+                                                }
+                                                .font(.subheadline)
+                                                .foregroundColor(.blue)
+                                                .padding(.horizontal)
+                                                .padding(.top)
+
+                                                Spacer()
+                                            }
+
+                                            ScrollView {
+                                                ChallengeDetailViewAthlete(challenge: challenge)
+                                                    .padding()
+                                            }
+
+                                        } else {
+                                            // ✅ Show Challenge List
+                                            Picker("Challenge Filter", selection: $selectedEventTab) {
+                                                Text("Open Challenges").tag("open")
+                                                Text("Closed Challenges").tag("closed")
+                                            }
+                                            .pickerStyle(SegmentedPickerStyle())
+                                            .padding(.top)
+                                            .padding(.horizontal)
+
+                                            let groupedChallenges = Dictionary(grouping: filteredChallenges) { challenge -> Date in
+                                                let calendar = Calendar.current
+                                                let components = calendar.dateComponents([.year, .month], from: challenge.startDate)
+                                                return calendar.date(from: components)!
+                                            }
+
+                                            let sortedMonthKeys = selectedEventTab == "closed"
+                                                ? groupedChallenges.keys.sorted(by: >)  // Descending month order
+                                                : groupedChallenges.keys.sorted(by: <)  // Ascending month order
+
+
+
+                                            ScrollView {
+                                                VStack(alignment: .leading, spacing: 24) {
+                                                    if groupedChallenges.isEmpty {
+                                                        Text("No \(selectedEventTab == "open" ? "open" : "closed") challenges found.")
+                                                            .foregroundColor(.gray)
+                                                            .padding(.top)
+                                                    } else {
+                                                        ForEach(sortedMonthKeys, id: \.self) { monthDate in
+                                                            let challengesInMonth = selectedEventTab == "closed"
+                                                                ? groupedChallenges[monthDate]!.sorted(by: { $0.startDate > $1.startDate })  // Descending
+                                                                : groupedChallenges[monthDate]!.sorted(by: { $0.startDate < $1.startDate })  // Ascending
+
+
+                                                            VStack(alignment: .leading, spacing: 12) {
+                                                                Text(monthName(from: monthDate))
+                                                                    .font(.title3)
+                                                                    .bold()
+                                                                    .padding(.horizontal)
+
+                                                                ForEach(Array(challengesInMonth.enumerated()), id: \.element.id) { index, challenge in
+                                                                    HStack(alignment: .top, spacing: 12) {
+                                                                        VStack(spacing: 2) {
+                                                                            Text(dayNumber(from: challenge.startDate))
+                                                                                .font(.title2)
+                                                                                .bold()
+                                                                                .foregroundColor(.black)
+
+                                                                            Text(dayName(from: challenge.startDate))
+                                                                                .font(.caption)
+                                                                                .foregroundColor(.gray)
+                                                                        }
+                                                                        .frame(width: 40)
+                                                                        .frame(maxHeight: .infinity, alignment: .top)
+                                                                        .frame(minHeight: 120, alignment: .top)
+                                                                        .multilineTextAlignment(.center)
+
+                                                                        GeometryReader { geo in
+                                                                            Button(action: {
+                                                                                selectedChallenge = challenge
+                                                                            }) {
+                                                                                ChallengeCardStyledLikeEventCard(challenge: challenge)
+                                                                            }
+                                                                            .buttonStyle(PlainButtonStyle())
+                                                                            .frame(width: geo.size.width)
+                                                                        }
+                                                                        .frame(maxWidth: .infinity)
+                                                                    }
+                                                                    .frame(maxWidth: .infinity)
+                                                                    .padding(.horizontal)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                .padding(.vertical)
+                                            }
+                                        }
+                                    }
+
+
+
+
 
                                 case .submissions:
                                     Text("Performance results you submitted (e.g. stats, highlights)")
@@ -354,13 +470,11 @@ struct AthleteDashboardView: View {
 
                             Spacer()
 
-                            if !bottomButtonTitle().isEmpty {
+                            if selectedTab == .events {
                                 Button(action: {
-                                    if selectedTab == .events {
-                                        showAddEventSheet = true
-                                    }
+                                    showAddEventSheet = true
                                 }) {
-                                    Text(bottomButtonTitle())
+                                    Text("Add Event")
                                         .fontWeight(.semibold)
                                         .frame(maxWidth: .infinity)
                                         .padding()
@@ -379,11 +493,8 @@ struct AthleteDashboardView: View {
                                 }) {
                                     AddEventCalendarView()
                                 }
-
-                                
-
-
                             }
+
                         }
                         .padding(.horizontal)
                     }
@@ -394,7 +505,15 @@ struct AthleteDashboardView: View {
                 fetchPendingSponsors()
                 fetchRejectedSubmissions()
                 fetchUploadedEvents()
+                fetchChallenges() // ← ADD THIS
             }
+            .onChange(of: selectedTab) { newTab in
+                if newTab == .challenges {
+                    fetchChallenges()
+                }
+            }
+
+
             .alert(isPresented: $showSignOutAlert) {
                 Alert(
                     title: Text("Sign Out"),
@@ -524,6 +643,26 @@ struct AthleteDashboardView: View {
                 self.hasRejectedSubmissions = !(snapshot?.documents.isEmpty ?? true)
             }
     }
+    private func fetchChallenges() {
+        Firestore.firestore().collection("challenges")
+            .whereField("assignedAthletes", arrayContains: userID)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Error listening for challenges: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let documents = snapshot?.documents else {
+                    print("No challenges found.")
+                    return
+                }
+
+                self.challenges = documents.compactMap { doc in
+                    try? doc.data(as: Challenge.self)
+                }
+            }
+    }
+
 
     private func signOut() {
         try? Auth.auth().signOut()
