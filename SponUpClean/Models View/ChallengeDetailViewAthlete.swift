@@ -287,7 +287,7 @@ struct ChallengeDetailViewAthlete: View {
         default: return .orange
         }
     }
-    
+
     // MARK: - Firestore Methods
 
     private func fetchSubmission() {
