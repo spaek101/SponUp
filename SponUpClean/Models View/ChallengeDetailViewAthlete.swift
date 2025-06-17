@@ -3,6 +3,8 @@ import FirebaseFirestore
 import FirebaseAuth
 import FirebaseStorage
 import PhotosUI
+import Vision
+import CoreML
 
 struct ChallengeDetailViewAthlete: View {
     let challenge: Challenge
@@ -10,6 +12,7 @@ struct ChallengeDetailViewAthlete: View {
 
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
+    @State private var ocrResults: [String] = []
     @State private var showSuccessMessage = false
     @State private var showResultAlreadySubmittedMessage = false
     @State private var hasSubmitted = false
@@ -28,6 +31,9 @@ struct ChallengeDetailViewAthlete: View {
     @State private var carrier: String = ""
     @State private var estimatedDeliveryDate: Date = Date()
     @State private var notes: String = ""
+
+    // ML Prediction State
+    @State private var predictedEventType: String? = nil
 
     var body: some View {
         ScrollView {
@@ -110,6 +116,29 @@ struct ChallengeDetailViewAthlete: View {
                         }
                     }
 
+                    if !ocrResults.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("📄 Parsed Stats")
+                                .font(.headline)
+                            ForEach(ocrResults, id: \.self) { line in
+                                Text(line)
+                                    .font(.callout)
+                                    .foregroundColor(.primary)
+                                    .padding(.vertical, 2)
+                            }
+                            // Prediction block
+                            if let prediction = predictedEventType {
+                                Text("📊 Predicted Event Type: \(prediction)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.blue)
+                                    .padding(.vertical, 4)
+                            }
+                        }
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+
                     if showSuccessMessage {
                         Text("✅ Successfully submitted.").foregroundColor(.green)
                     }
@@ -133,10 +162,12 @@ struct ChallengeDetailViewAthlete: View {
                         .onChange(of: selectedPhotoItems) { _, newItems in
                             Task {
                                 selectedImages.removeAll()
+                                ocrResults.removeAll()
                                 for item in newItems {
                                     if let data = try? await item.loadTransferable(type: Data.self),
                                        let uiImage = UIImage(data: data) {
                                         selectedImages.append(uiImage)
+                                        performOCR(on: uiImage)
                                     }
                                 }
                                 showResultAlreadySubmittedMessage = false
@@ -403,5 +434,77 @@ struct ChallengeDetailViewAthlete: View {
         currentImageIndex = 0
         showSuccessMessage = true
         showDeliveryForm = false
+    }
+    // MARK: - OCR Helper
+    private func performOCR(on image: UIImage) {
+        guard let cgImage = image.cgImage else { return }
+        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        let request = VNRecognizeTextRequest { (request, error) in
+            if let results = request.results as? [VNRecognizedTextObservation] {
+                let recognizedStrings = results.compactMap { $0.topCandidates(1).first?.string }
+                DispatchQueue.main.async {
+                    self.ocrResults.append(contentsOf: recognizedStrings)
+                    // Predict event type after OCR
+                    self.predictEventType(from: self.ocrResults)
+                }
+            }
+        }
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try requestHandler.perform([request])
+            } catch {
+                print("❌ OCR failed: \(error)")
+            }
+        }
+    }
+
+    // MARK: - ML Prediction
+    private func predictEventType(from lines: [String]) {
+        guard let model = try? EventTypeClassifier(configuration: MLModelConfiguration()) else {
+            print("❌ Failed to load Core ML model.")
+            return
+        }
+
+        // Try to extract numeric values from OCR
+        var ab: Int64 = 0, h: Int64 = 0, hr: Int64 = 0, rbi: Int64 = 0
+        var avg: Double = 0.0
+
+        for line in lines {
+            let lower = line.lowercased()
+            if let match = line.range(of: #"(\d+)\s*AB"#, options: .regularExpression) {
+                ab = Int64(line[match].replacingOccurrences(of: "AB", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+            if let match = line.range(of: #"(\d+)\s*H"#, options: .regularExpression) {
+                h = Int64(line[match].replacingOccurrences(of: "H", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+            if let match = line.range(of: #"(\d+)\s*HR"#, options: .regularExpression) {
+                hr = Int64(line[match].replacingOccurrences(of: "HR", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+            if let match = line.range(of: #"(\d+)\s*RBI"#, options: .regularExpression) {
+                rbi = Int64(line[match].replacingOccurrences(of: "RBI", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+            if let match = line.range(of: #"AVG[:=]?\s*([\d.]+)"#, options: .regularExpression) {
+                let number = line[match].components(separatedBy: CharacterSet(charactersIn: ":= ")).last ?? ""
+                avg = Double(number) ?? 0.0
+            }
+        }
+
+        // Avoid division by zero
+        if ab > 0 && h > 0 {
+            avg = Double(h) / Double(ab)
+        }
+
+        do {
+            let input = EventTypeClassifierInput(athlete_name: "", event_context: "", raw_text: "", AB: ab, H: h, HR: hr, RBI: rbi, AVG: avg)
+            let result = try model.prediction(input: input)
+            DispatchQueue.main.async {
+                self.predictedEventType = result.event_type
+            }
+        } catch {
+            print("❌ Prediction failed: \(error)")
+        }
     }
 }
