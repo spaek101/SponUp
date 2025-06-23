@@ -2,6 +2,8 @@ import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
 
+
+
 struct AthleteDashboardView: View {
     enum Tab: String, CaseIterable {
         case events, challenges, submissions, sponsors
@@ -43,6 +45,7 @@ struct AthleteDashboardView: View {
     @State private var eventToEdit: EventItem? = nil
     @State private var challenges: [Challenge] = []
     @State private var selectedChallenge: Challenge? = nil
+    
 
 
 
@@ -457,14 +460,12 @@ struct AthleteDashboardView: View {
 
 
                                 case .submissions:
-                                    Text("Performance results you submitted (e.g. stats, highlights)")
-                                        .foregroundColor(.gray)
-                                        .padding(.top)
+                                    SubmissionsTabContent()
 
                                 case .sponsors:
-                                    Text("Your sponsors")
-                                        .foregroundColor(.gray)
+                                    AddSponsorView()
                                         .padding(.top)
+
                                 }
                             }
 
@@ -672,5 +673,200 @@ struct AthleteDashboardView: View {
     }
 }
 
-    
+
+struct SubmissionsTabContent: View {
+    @AppStorage("userRole") var userRole: String = "athlete"
+    @AppStorage("hasSeenSwipeTip") var hasSeenSwipeTip: Bool = false
+    @State private var submissions: [SubmissionDisplay] = []
+    @State private var isLoading = true
+    @State private var selectedFilter: String = "Show All"
+    @State private var hasRejected: Bool = false
+    @State private var isInitialized = false
+
+    let filterOptions = ["Show All", "Pending", "Approved", "Rejected", "Rewarded"]
+
+    var filteredSubmissions: [SubmissionDisplay] {
+        if selectedFilter == "Show All" {
+            return submissions
+        } else {
+            return submissions.filter { $0.submission.status.lowercased() == selectedFilter.lowercased() }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                
+                
+                ZStack {
+                    Picker("Filter by:", selection: $selectedFilter) {
+                        ForEach(filterOptions, id: \.self) { option in
+                            Text(option).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    
+                    if hasRejected {
+                        GeometryReader { geo in
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 10, height: 10)
+                                .offset(x: geo.size.width * 0.72, y: -2)
+                        }
+                        .allowsHitTesting(false)
+                    }
+                }
+                .frame(height: 36)
+            }
+            
+            if !hasSeenSwipeTip && !filteredSubmissions.isEmpty {
+                Text("👈 Swipe left to delete a submission")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding(.horizontal)
+                    .transition(.opacity)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                            withAnimation {
+                                hasSeenSwipeTip = true
+                            }
+                        }
+                    }
+            }
+            
+            Group {
+                if !isInitialized {
+                    VStack {
+                        Spacer()
+                        ProgressView("Loading submissions...")
+                        Spacer()
+                    }
+                } else if !filteredSubmissions.isEmpty {
+                    List {
+                        ForEach(filteredSubmissions) { item in
+                            if let challenge = item.challenge {
+                                NavigationLink(destination: ChallengeDetailViewAthlete(challenge: challenge)) {
+                                    SubmissionCard(item: item)
+                                }
+                            } else {
+                                SubmissionCard(item: item)
+                            }
+                        }
+                    }
+                    .listStyle(PlainListStyle())
+                } else {
+                    VStack {
+                        Spacer()
+                        Text("No submissions available.")
+                            .font(.headline)
+                            .foregroundColor(.gray)
+                            .padding()
+                        Spacer()
+                    }
+                }
+            }
+
+            
+        }
+        .padding(.top)
+        .onAppear {
+            isLoading = true
+            fetchSubmissions()
+        }
+
+    }
+
+    private func fetchSubmissions() {
+        guard let athleteID = Auth.auth().currentUser?.uid else {
+            print("❌ No logged in user")
+            return
+        }
+
+        let db = Firestore.firestore()
+        db.collection("submissions")
+            .whereField("athleteID", isEqualTo: athleteID)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("❌ Error fetching submissions: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let docs = snapshot?.documents else { return }
+
+                var fetched: [SubmissionDisplay] = []
+                var foundRejected = false
+                let dispatchGroup = DispatchGroup()
+
+                for doc in docs {
+                    let data = doc.data()
+                    let challengeID = data["challengeID"] as? String ?? "unknown"
+                    let imageURLs = data["imageURLs"] as? [String] ?? []
+                    let status = data["status"] as? String ?? "Pending"
+                    let submittedAt = (data["submittedAt"] as? Timestamp)?.dateValue() ?? Date()
+
+                    if status.lowercased() == "rejected" {
+                        foundRejected = true
+                    }
+
+                    dispatchGroup.enter()
+                    db.collection("challenges").document(challengeID).getDocument { challengeSnap, _ in
+                        defer { dispatchGroup.leave() }
+
+                        guard let challengeData = challengeSnap?.data() else { return }
+
+                        let title = challengeData["title"] as? String ?? "Untitled"
+                        let reward = challengeData["reward"] as? String ?? "No reward"
+                        let achievementsData = challengeData["achievements"] as? [[String: Any]] ?? []
+                        let achievements = achievementsData.compactMap { dict -> ChallengeAchievement? in
+                            guard let type = dict["type"] as? String,
+                                  let quantity = dict["quantity"] as? Int else { return nil }
+                            return ChallengeAchievement(type: type, quantity: quantity)
+                        }
+
+                        let startDate = (challengeData["startDate"] as? Timestamp)?.dateValue() ?? Date()
+                        let endDate = (challengeData["endDate"] as? Timestamp)?.dateValue() ?? Date()
+                        let sponsorID = challengeData["sponsorID"] as? String ?? ""
+                        let createdBy = challengeData["createdBy"] as? String ?? ""
+                        let assignedAthletes = challengeData["assignedAthletes"] as? [String] ?? []
+
+                        let challenge = Challenge(
+                            id: challengeSnap?.documentID,
+                            title: title,
+                            reward: reward,
+                            achievements: achievements,
+                            startDate: startDate,
+                            endDate: endDate,
+                            sponsorID: sponsorID,
+                            createdBy: createdBy,
+                            assignedAthletes: assignedAthletes
+                        )
+
+                        let display = SubmissionDisplay(
+                            id: doc.documentID,
+                            challengeTitle: title,
+                            challengeID: challengeID,
+                            reward: reward,
+                            challenge: challenge,
+                            submission: SubmissionInfo(
+                                imageURLs: imageURLs,
+                                status: status,
+                                submittedAt: submittedAt
+                            )
+                        )
+
+                        fetched.append(display)
+                    }
+                }
+
+                dispatchGroup.notify(queue: .main) {
+                    self.submissions = fetched.sorted { $0.submission.submittedAt > $1.submission.submittedAt }
+                    self.hasRejected = foundRejected
+                    self.isInitialized = true
+                }
+            }
+    }
+
+}
+
 

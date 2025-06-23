@@ -17,13 +17,7 @@ struct AddSponsorView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                // Page Title
-                Text("My Sponsors")
-                    .font(.largeTitle)
-                    .bold()
-                    .padding(.top, 24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
+               
 
                 // Sponsor Input
                 VStack(spacing: 10) {
