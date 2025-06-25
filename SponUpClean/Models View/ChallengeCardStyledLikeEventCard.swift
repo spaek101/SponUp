@@ -37,7 +37,6 @@ struct ChallengeCardStyledLikeEventCard: View {
 
                 // Time remaining or status
                 let remaining = timeRemaining()
-
                 if !remaining.value.isEmpty {
                     HStack(spacing: 4) {
                         Text(remaining.label)
@@ -53,21 +52,13 @@ struct ChallengeCardStyledLikeEventCard: View {
                         .foregroundColor(remaining.color)
                 }
 
-                // Status Row (either status dot or event-in-progress message)
-                if shouldShowStatusDot(status: status) {
-                    if let msg = statusMessage(for: status) {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(msg.color)
-                                .frame(width: 8, height: 8)
-                            Text(msg.text)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                } else if isEventInProgress() {
+                // Status Message (like "Rejected", "Rewarded", etc)
+                if let msg = statusMessage(for: status) {
                     HStack(spacing: 6) {
-                        Text("Event in progress...")
+                        Circle()
+                            .fill(msg.color)
+                            .frame(width: 8, height: 8)
+                        Text(msg.text)
                             .font(.caption2)
                             .foregroundColor(.gray)
                     }
@@ -76,14 +67,14 @@ struct ChallengeCardStyledLikeEventCard: View {
             .padding(.horizontal)
             .padding(.vertical, 12)
 
+            // Ellipsis icon (optional actions)
             Image(systemName: "ellipsis")
                 .rotationEffect(.degrees(90))
                 .foregroundColor(.gray)
                 .padding(.trailing, 8)
                 .padding(.top, 15)
         }
-        
-        .frame(maxWidth: .infinity) // No fixed height
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Logic
@@ -98,7 +89,7 @@ struct ChallengeCardStyledLikeEventCard: View {
             let time = start.timeIntervalSince(now)
             return ("Starts in:", formatTime(time), .gray)
         } else if now >= start && now <= end {
-            return ("", "", .clear) // show event-in-progress via isEventInProgress()
+            return ("", "", .clear) // Event in progress (no timer shown)
         } else if now > end && now <= submissionDeadline {
             let time = submissionDeadline.timeIntervalSince(now)
             return ("Submission ends in:", formatTime(time), .red)
@@ -123,15 +114,5 @@ struct ChallengeCardStyledLikeEventCard: View {
         case "pending": return ("Pending Review", .gray)
         default: return nil
         }
-    }
-
-    private func shouldShowStatusDot(status: String?) -> Bool {
-        guard let status = status?.lowercased() else { return false }
-        return ["pending", "approved", "rejected", "rewarded"].contains(status)
-    }
-
-    private func isEventInProgress() -> Bool {
-        let now = Date()
-        return now >= challenge.startDate && now <= challenge.endDate && !shouldShowStatusDot(status: status)
     }
 }
