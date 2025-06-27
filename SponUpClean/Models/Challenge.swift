@@ -2,6 +2,22 @@ import Foundation
 import FirebaseFirestoreSwift
 import FirebaseFirestore
 
+extension Challenge {
+    static let placeholder = Challenge(
+        id: "placeholder",
+        title: "Loading...",
+        startDate: Date(),
+        endDate: Date(),
+        sponsorID: "",
+        createdBy: "",
+        assignedAthletes: [],
+        eventID: nil,
+        desiredAgeGroups: nil,
+        type: nil,
+        logoURL: nil
+    )
+}
+
 // MARK: - ChallengeAchievement
 struct ChallengeAchievement: Hashable, Codable {
     var type: String       // e.g. "HR", "RBI"
@@ -45,7 +61,6 @@ struct Challenge: Identifiable, Codable, Hashable, Equatable {
 
     // Local-only field
     var submissions: [Submission] = []                    // not decoded from Firestore
-    
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -92,5 +107,27 @@ struct Challenge: Identifiable, Codable, Hashable, Equatable {
         hasher.combine(eventID)
         hasher.combine(type)
         hasher.combine(logoURL)
+    }
+
+    // ✅ NEW: Firestore dictionary initializer
+    static func fromFirestore(_ data: [String: Any], id: String) -> Challenge {
+        return Challenge(
+            id: id,
+            title: data["title"] as? String ?? "",
+            reward: data["reward"] as? String ?? "",
+            achievements: (data["achievements"] as? [[String: Any]])?.compactMap {
+                guard let type = $0["type"] as? String, let quantity = $0["quantity"] as? Int else { return nil }
+                return ChallengeAchievement(type: type, quantity: quantity)
+            } ?? [],
+            startDate: (data["startDate"] as? Timestamp)?.dateValue() ?? Date(),
+            endDate: (data["endDate"] as? Timestamp)?.dateValue() ?? Date(),
+            sponsorID: data["sponsorID"] as? String ?? "",
+            createdBy: data["createdBy"] as? String ?? "",
+            assignedAthletes: data["assignedAthletes"] as? [String] ?? [],
+            eventID: data["eventID"] as? String,
+            desiredAgeGroups: data["desiredAgeGroups"] as? [String],
+            type: data["type"] as? String,
+            logoURL: data["logoURL"] as? String
+        )
     }
 }

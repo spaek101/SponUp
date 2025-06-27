@@ -6,16 +6,18 @@ import FirebaseFirestore
 
 struct AthleteDashboardView: View {
     enum Tab: String, CaseIterable {
-        case events, challenges, submissions, sponsors
+        case tasks, events, challenges, submissions, sponsors
 
         var iconName: String {
             switch self {
+            case .tasks: return "checkmark.circle"
             case .events: return "calendar"
             case .challenges: return "flag.fill"
             case .submissions: return "tray.full"
             case .sponsors: return "person.3.fill"
             }
         }
+
     }
 
     struct EventItem: Identifiable {
@@ -27,7 +29,7 @@ struct AthleteDashboardView: View {
         var lastName: String
     }
 
-    @State private var selectedTab: Tab = .events
+    @State private var selectedTab: Tab = .tasks
     @AppStorage("userRole") var userRole: String = ""
     @AppStorage("userID") var userID: String = ""
     @State private var firstName: String = ""
@@ -45,10 +47,7 @@ struct AthleteDashboardView: View {
     @State private var eventToEdit: EventItem? = nil
     @State private var challenges: [Challenge] = []
     @State private var selectedChallenge: Challenge? = nil
-    
-    
-
-
+    @State private var hasApprovedSponsors = false
 
 
 
@@ -104,7 +103,6 @@ struct AthleteDashboardView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Spacer()
-
                         NavigationLink(destination: AthleteProfileView()) {
                             Image(systemName: "person.crop.circle")
                                 .resizable()
@@ -134,10 +132,23 @@ struct AthleteDashboardView: View {
                                 )
                                 .onTapGesture {
                                     selectedTab = tab
+
+                                    if tab == .tasks {
+                                        fetchApprovedSponsorCount()
+                                        checkForRejectedSubmissions()
+                                    }
                                 }
                         }
                     }
                     .padding(.top)
+
+
+                    // 👇 Real-time refresh for sponsor status
+                    .onChange(of: selectedTab) { newTab in
+                        if newTab == .tasks {
+                            fetchApprovedSponsorCount()
+                        }
+                    }
 
                     Spacer()
 
@@ -149,6 +160,16 @@ struct AthleteDashboardView: View {
                         VStack(alignment: .leading, spacing: 16) {
                             Group {
                                 switch selectedTab {
+                                case .tasks:
+                                    TasksView(
+                                        hasPendingSponsors: hasPendingSponsors,
+                                        hasEvents: !events.isEmpty,
+                                        hasApprovedSponsors: hasApprovedSponsors,
+                                        hasRejectedSubmissions: hasRejectedSubmissions  // <-- pass this
+                                    )
+
+
+
                                 case .events:
                                     VStack(spacing: 16) {
                                         Picker("Event Filter", selection: $selectedEventTab) {
@@ -505,10 +526,12 @@ struct AthleteDashboardView: View {
             .onAppear {
                 fetchUserProfile()
                 fetchPendingSponsors()
+                fetchApprovedSponsorCount()
                 fetchRejectedSubmissions()
                 fetchUploadedEvents()
-                fetchChallenges() // ← ADD THIS
+                fetchChallenges()
             }
+
             .onChange(of: selectedTab) { newTab in
                 if newTab == .challenges {
                     fetchChallenges()
@@ -531,6 +554,35 @@ struct AthleteDashboardView: View {
     }
 
     // MARK: - Helpers
+    
+    private func fetchApprovedSponsorCount() {
+        Firestore.firestore().collection("users").document(userID).getDocument { doc, _ in
+            guard let data = doc?.data() else { return }
+            let approved = data["sponsorIDs"] as? [String] ?? []
+            DispatchQueue.main.async {
+                hasApprovedSponsors = !approved.isEmpty
+            }
+        }
+    }
+
+    private func checkForRejectedSubmissions() {
+        Firestore.firestore()
+            .collection("submissions")
+            .whereField("athleteID", isEqualTo: userID)
+            .whereField("status", isEqualTo: "Rejected")
+            .getDocuments { snapshot, error in
+                if let docs = snapshot?.documents, !docs.isEmpty {
+                    DispatchQueue.main.async {
+                        hasRejectedSubmissions = true
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        hasRejectedSubmissions = false
+                    }
+                }
+            }
+    }
+
 
     private func fetchUploadedEvents() {
         guard !userID.isEmpty else { return }
@@ -571,12 +623,14 @@ struct AthleteDashboardView: View {
 
     private func bottomButtonTitle() -> String {
         switch selectedTab {
+        case .tasks: return ""
         case .events: return "Add Event"
         case .challenges: return "Upload Results"
         case .submissions: return ""
         case .sponsors: return "Add Sponsor"
         }
     }
+
 
     private func deleteEvent(_ event: EventItem) {
         Firestore.firestore().collection("events").document(event.id).delete { error in
@@ -663,6 +717,8 @@ struct AthleteDashboardView: View {
                     try? doc.data(as: Challenge.self)
                 }
             }
+        
+
     }
 
 
@@ -723,6 +779,7 @@ struct SubmissionsTabContent: View {
                 .frame(height: 36)
 
             }
+            
             
             if !hasSeenSwipeTip && !filteredSubmissions.isEmpty {
                 Text("👈 Swipe left to delete a submission")

@@ -3,7 +3,10 @@ import FirebaseAuth
 import FirebaseFirestore
 
 struct AddSponsorView: View {
+    var startOnPending: Bool = false
     @AppStorage("userID") var userID: String = ""
+    @Binding var hasApprovedSponsors: Bool
+
     @State private var sponsorID = ""
     @State private var sponsors: [Sponsor] = []
     @State private var pendingSponsors: [Sponsor] = []
@@ -14,11 +17,15 @@ struct AddSponsorView: View {
     @State private var showToast = false
     @State private var selectedTab = 0
 
+    // ✅ Custom initializer to fix binding error
+    init(startOnPending: Bool = false, hasApprovedSponsors: Binding<Bool> = .constant(false)) {
+        self.startOnPending = startOnPending
+        self._hasApprovedSponsors = hasApprovedSponsors
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-               
-
                 // Sponsor Input
                 VStack(spacing: 10) {
                     TextField("Enter Sponsor ID", text: $sponsorID)
@@ -63,8 +70,6 @@ struct AddSponsorView: View {
                             .offset(x: -24, y: 6)
                     }
                 }
-
-                
 
                 // Sponsor Lists
                 if selectedTab == 0 {
@@ -177,8 +182,6 @@ struct AddSponsorView: View {
         }
     }
 
-    // MARK: - Helper Views
-
     private func sponsorRow(_ sponsor: Sponsor) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(sponsor.firstName) \(sponsor.lastName)")
@@ -189,7 +192,13 @@ struct AddSponsorView: View {
         }
     }
 
-    // MARK: - Firestore Logic
+    private func fetchApprovedSponsorCount() {
+        Firestore.firestore().collection("users").document(userID).getDocument { doc, _ in
+            guard let data = doc?.data() else { return }
+            let approved = data["sponsorIDs"] as? [String] ?? []
+            hasApprovedSponsors = !approved.isEmpty
+        }
+    }
 
     private func fetchSponsors() {
         let db = Firestore.firestore()
@@ -198,7 +207,6 @@ struct AddSponsorView: View {
 
             let approved = data["sponsorIDs"] as? [String] ?? []
             let pending = data["pendingSponsors"] as? [String] ?? []
-
             let actualPending = pending.filter { !approved.contains($0) }
 
             var loadedApproved: [Sponsor] = []
@@ -236,6 +244,7 @@ struct AddSponsorView: View {
             group.notify(queue: .main) {
                 sponsors = loadedApproved
                 pendingSponsors = loadedPending
+                fetchApprovedSponsorCount() // ✅ live sync
             }
         }
     }
@@ -291,7 +300,9 @@ struct AddSponsorView: View {
         db.collection("users").document(userID).updateData([
             "sponsorIDs": FieldValue.arrayUnion([sponsor.id]),
             "pendingSponsors": FieldValue.arrayRemove([sponsor.id])
-        ]) { _ in fetchSponsors() }
+        ]) { _ in
+            fetchSponsors()
+        }
     }
 
     private func declineSponsor(_ sponsor: Sponsor) {
@@ -301,7 +312,9 @@ struct AddSponsorView: View {
         ])
         db.collection("users").document(sponsor.id).updateData([
             "pendingAthletes": FieldValue.arrayRemove([userID])
-        ]) { _ in fetchSponsors() }
+        ]) { _ in
+            fetchSponsors()
+        }
     }
 
     private func deleteConfirmedSponsor(_ sponsor: Sponsor) {
@@ -313,7 +326,9 @@ struct AddSponsorView: View {
             db.collection("users").document(sponsor.id).updateData([
                 "approvedAthletes": FieldValue.arrayRemove([userID]),
                 "pendingAthletes": FieldValue.arrayRemove([userID])
-            ]) { _ in fetchSponsors() }
+            ]) { _ in
+                fetchSponsors()
+            }
         }
     }
 
