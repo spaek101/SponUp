@@ -46,6 +46,7 @@ struct AthleteDashboardView: View {
     @State private var challenges: [Challenge] = []
     @State private var selectedChallenge: Challenge? = nil
     
+    
 
 
 
@@ -679,11 +680,13 @@ struct SubmissionsTabContent: View {
     @AppStorage("hasSeenSwipeTip") var hasSeenSwipeTip: Bool = false
     @State private var submissions: [SubmissionDisplay] = []
     @State private var isLoading = true
-    @State private var selectedFilter: String = "Show All"
+    @State private var selectedFilter: String = "Pending" // Default active tab
+    let allFilterOption = "Show All"
+
     @State private var hasRejected: Bool = false
     @State private var isInitialized = false
 
-    let filterOptions = ["Show All", "Pending", "Approved", "Rejected", "Rewarded"]
+    let filterOptions = ["Pending", "Approved", "Rejected", "Rewarded"]
 
     var filteredSubmissions: [SubmissionDisplay] {
         if selectedFilter == "Show All" {
@@ -706,7 +709,7 @@ struct SubmissionsTabContent: View {
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
-                    
+
                     if hasRejected {
                         GeometryReader { geo in
                             Circle()
@@ -718,6 +721,7 @@ struct SubmissionsTabContent: View {
                     }
                 }
                 .frame(height: 36)
+
             }
             
             if !hasSeenSwipeTip && !filteredSubmissions.isEmpty {
@@ -734,6 +738,27 @@ struct SubmissionsTabContent: View {
                         }
                     }
             }
+            
+            HStack {
+                Spacer()
+                
+                Text("Show All")
+                    .font(.footnote)
+                    .foregroundColor(.gray)
+
+                Toggle("", isOn: Binding<Bool>(
+                    get: { selectedFilter == allFilterOption },
+                    set: { newValue in
+                        selectedFilter = newValue ? allFilterOption : filterOptions.first ?? "Pending"
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(SwitchToggleStyle(tint: .black))
+                .padding(.trailing, 8)
+            }
+            .padding(.bottom, 4)
+
+
             
             Group {
                 if !isInitialized {
@@ -868,5 +893,3 @@ struct SubmissionsTabContent: View {
     }
 
 }
-
-
