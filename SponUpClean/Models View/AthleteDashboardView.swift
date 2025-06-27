@@ -44,6 +44,26 @@ struct AthleteDashboardView: View {
     @State private var isEditingEvent = false
     @State private var eventToEdit: EventItem? = nil
     @State private var challenges: [Challenge] = []
+    // MARK: - Computed property for today's challenges
+    private var todayChallenges: [Challenge] {
+        let today = Calendar.current.startOfDay(for: Date())
+        return challenges.filter {
+            Calendar.current.startOfDay(for: $0.startDate) <= today &&
+            Calendar.current.startOfDay(for: $0.endDate) >= today
+        }
+    }
+
+    private var groupedTodayChallenges: [String: [Challenge]] {
+        Dictionary(grouping: todayChallenges) { $0.title }
+    }
+
+    private var sortedEventGroups: [(key: String, value: [Challenge])] {
+        groupedTodayChallenges.sorted {
+            let firstEnd1 = $0.value.map { $0.endDate }.min() ?? Date.distantFuture
+            let firstEnd2 = $1.value.map { $0.endDate }.min() ?? Date.distantFuture
+            return firstEnd1 < firstEnd2
+        }
+    }
     @State private var selectedChallenge: Challenge? = nil
     
 
@@ -352,30 +372,25 @@ struct AthleteDashboardView: View {
 
                                 case .challenges:
                                     VStack(spacing: 16) {
-                                        if let challenge = selectedChallenge {
-                                            // ✅ Show Challenge Detail View Fullscreen in White Area
-                                            HStack {
-                                                Button(action: {
-                                                    selectedChallenge = nil // Go back to list
-                                                }) {
-                                                    Image(systemName: "chevron.left")
-                                                    Text("Back to Challenges")
-                                                }
-                                                .font(.subheadline)
-                                                .foregroundColor(.blue)
-                                                .padding(.horizontal)
-                                                .padding(.top)
-
-                                                Spacer()
-                                            }
-
+                                        if !todayChallenges.isEmpty {
                                             ScrollView {
-                                                ChallengeDetailViewAthlete(challenge: challenge)
-                                                    .padding()
-                                            }
+                                                ForEach(sortedEventGroups, id: \.key) { eventName, challenges in
+                                                    Text(eventName)
+                                                        .font(.title3)
+                                                        .bold()
+                                                        .padding(.horizontal)
+                                                        .padding(.top, 8)
 
+                                                    VStack(spacing: 16) {
+                                                        ForEach(challenges) { challenge in
+                                                            ChallengeDetailViewAthlete(challenge: challenge)
+                                                                .padding(.horizontal)
+                                                        }
+                                                    }
+                                                    .padding(.bottom, 24)
+                                                }
+                                            }
                                         } else {
-                                            // ✅ Show Challenge List
                                             Picker("Challenge Filter", selection: $selectedEventTab) {
                                                 Text("Open Challenges").tag("open")
                                                 Text("Closed Challenges").tag("closed")
@@ -391,10 +406,8 @@ struct AthleteDashboardView: View {
                                             }
 
                                             let sortedMonthKeys = selectedEventTab == "closed"
-                                                ? groupedChallenges.keys.sorted(by: >)  // Descending month order
-                                                : groupedChallenges.keys.sorted(by: <)  // Ascending month order
-
-
+                                                ? groupedChallenges.keys.sorted(by: >)
+                                                : groupedChallenges.keys.sorted(by: <)
 
                                             ScrollView {
                                                 VStack(alignment: .leading, spacing: 24) {
@@ -405,9 +418,8 @@ struct AthleteDashboardView: View {
                                                     } else {
                                                         ForEach(sortedMonthKeys, id: \.self) { monthDate in
                                                             let challengesInMonth = selectedEventTab == "closed"
-                                                                ? groupedChallenges[monthDate]!.sorted(by: { $0.startDate > $1.startDate })  // Descending
-                                                                : groupedChallenges[monthDate]!.sorted(by: { $0.startDate < $1.startDate })  // Ascending
-
+                                                                ? groupedChallenges[monthDate]!.sorted(by: { $0.startDate > $1.startDate })
+                                                                : groupedChallenges[monthDate]!.sorted(by: { $0.startDate < $1.startDate })
 
                                                             VStack(alignment: .leading, spacing: 12) {
                                                                 Text(monthName(from: monthDate))
@@ -415,7 +427,7 @@ struct AthleteDashboardView: View {
                                                                     .bold()
                                                                     .padding(.horizontal)
 
-                                                                ForEach(Array(challengesInMonth.enumerated()), id: \.element.id) { index, challenge in
+                                                                ForEach(challengesInMonth) { challenge in
                                                                     HStack(alignment: .top, spacing: 12) {
                                                                         VStack(spacing: 2) {
                                                                             Text(dayNumber(from: challenge.startDate))
@@ -453,6 +465,7 @@ struct AthleteDashboardView: View {
                                                 .padding(.vertical)
                                             }
                                         }
+                                        
                                     }
 
 
@@ -530,6 +543,8 @@ struct AthleteDashboardView: View {
     }
 
     // MARK: - Helpers
+    
+    
 
     private func fetchUploadedEvents() {
         guard !userID.isEmpty else { return }
@@ -671,7 +686,9 @@ struct AthleteDashboardView: View {
         userRole = ""
         isSignedOut = true
     }
+    
 }
+
 
 
 struct SubmissionsTabContent: View {
@@ -868,5 +885,6 @@ struct SubmissionsTabContent: View {
     }
 
 }
-
-
+#Preview {
+    AthleteDashboardView()
+}
