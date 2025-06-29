@@ -771,7 +771,7 @@ struct SubmissionsTabContent: View {
                             Circle()
                                 .fill(Color.red)
                                 .frame(width: 10, height: 10)
-                                .offset(x: geo.size.width * 0.72, y: -2)
+                                .offset(x: geo.size.width * 0.635, y: -4) // fine-tuned to sit over Rejected tab
                         }
                         .allowsHitTesting(false)
                     }

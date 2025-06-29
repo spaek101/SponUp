@@ -19,6 +19,12 @@ struct TasksView: View {
 
     @State private var selectedChallengeID: String? = nil
     @State private var loadedChallenge: Challenge? = nil
+    @State private var showUploadResultTask: Bool = false
+
+    // New navigation states
+    @State private var showAddEvent = false
+    @State private var showAddSponsor = false
+    @State private var showAddSponsorPending = false
 
     var body: some View {
         NavigationStack {
@@ -32,11 +38,28 @@ struct TasksView: View {
                         }
                     }
 
+                    // NavigationLinks triggered by flags
+                    NavigationLink(destination: AddEventCalendarView(), isActive: $showAddEvent) {
+                        EmptyView()
+                    }.hidden()
+
+                    NavigationLink(destination: AddSponsorView(hasApprovedSponsors: .constant(false)), isActive: $showAddSponsor) {
+                        EmptyView()
+                    }.hidden()
+
+                    NavigationLink(destination: AddSponsorView(startOnPending: true, hasApprovedSponsors: .constant(true)), isActive: $showAddSponsorPending) {
+                        EmptyView()
+                    }.hidden()
+
                     NavigationLink(
                         tag: loadedChallenge?.id ?? "",
                         selection: $selectedChallengeID,
                         destination: {
-                            ChallengeDetailViewAthlete(challenge: loadedChallenge ?? Challenge.placeholder)
+                            if let challenge = loadedChallenge {
+                                ChallengeDetailViewAthlete(challenge: challenge)
+                            } else {
+                                EmptyView()
+                            }
                         },
                         label: {
                             EmptyView()
@@ -47,15 +70,14 @@ struct TasksView: View {
                 .padding(.vertical)
                 .padding(.horizontal)
             }
-        }
-        .navigationTitle("Tasks")
-        .onAppear {
-            // Reset navigation state when returning
-            self.loadedChallenge = nil
-            self.selectedChallengeID = nil
+            .navigationTitle("Tasks")
+            .onAppear {
+                self.loadedChallenge = nil
+                self.selectedChallengeID = nil
+                checkForUploadableChallenges()
+            }
         }
     }
-
 
     private var tasks: [TaskItem] {
         var items: [TaskItem] = []
@@ -68,7 +90,7 @@ struct TasksView: View {
                     icon: "calendar.badge.plus",
                     color: .blue,
                     action: {
-                        navigateToView(AnyView(AddEventCalendarView()))
+                        showAddEvent = true
                     }
                 )
             )
@@ -82,7 +104,7 @@ struct TasksView: View {
                     icon: "person.crop.circle.badge.plus",
                     color: .purple,
                     action: {
-                        navigateToView(AnyView(AddSponsorView(hasApprovedSponsors: .constant(false))))
+                        showAddSponsor = true
                     }
                 )
             )
@@ -96,7 +118,7 @@ struct TasksView: View {
                     icon: "person.crop.circle.badge.questionmark",
                     color: .orange,
                     action: {
-                        navigateToView(AnyView(AddSponsorView(startOnPending: true, hasApprovedSponsors: .constant(false))))
+                        showAddSponsorPending = true
                     }
                 )
             )
@@ -116,29 +138,23 @@ struct TasksView: View {
             )
         }
 
-        items.append(
-            TaskItem(
-                title: "Upload Challenge Result",
-                description: "Upload your challenge result.",
-                icon: "tray.and.arrow.up.fill",
-                color: .green,
-                action: {
-                    navigateToView(AnyView(SubmissionsTabContent()))
-                }
+        if showUploadResultTask {
+            items.append(
+                TaskItem(
+                    title: "Upload Challenge Result",
+                    description: "Upload your challenge result.",
+                    icon: "tray.and.arrow.up.fill",
+                    color: .green,
+                    action: {
+                        if let challenge = loadedChallenge {
+                            self.selectedChallengeID = challenge.id
+                        }
+                    }
+                )
             )
-        )
+        }
 
         return items
-    }
-
-    private func navigateToView(_ view: AnyView) {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        DispatchQueue.main.async {
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
-                window.rootViewController?.present(UIHostingController(rootView: view), animated: true)
-            }
-        }
     }
 
     private func taskCard(_ task: TaskItem) -> some View {
@@ -218,6 +234,59 @@ struct TasksView: View {
                             DispatchQueue.main.async {
                                 self.loadedChallenge = challenge
                                 self.selectedChallengeID = challenge.id
+                            }
+                        }
+                }
+            }
+    }
+
+    private func checkForUploadableChallenges() {
+        guard let userID = Auth.auth().currentUser?.uid else { return }
+        let db = Firestore.firestore()
+        let now = Date()
+
+        db.collection("challenges")
+            .whereField("assignedAthletes", arrayContains: userID)
+            .getDocuments { snapshot, _ in
+                guard let documents = snapshot?.documents else { return }
+
+                for doc in documents {
+                    let data = doc.data()
+                    let challengeID = doc.documentID
+                    let endDate = (data["endDate"] as? Timestamp)?.dateValue() ?? Date()
+                    let fiveDaysAfter = endDate.addingTimeInterval(5 * 86400)
+
+                    guard endDate < now && now <= fiveDaysAfter else { continue }
+
+                    db.collection("submissions")
+                        .whereField("challengeID", isEqualTo: challengeID)
+                        .whereField("athleteID", isEqualTo: userID)
+                        .limit(to: 1)
+                        .getDocuments { subSnap, _ in
+                            let alreadySubmitted = (subSnap?.documents.count ?? 0) > 0
+                            guard !alreadySubmitted else { return }
+
+                            let title = data["title"] as? String ?? "Untitled"
+                            let startDate = (data["startDate"] as? Timestamp)?.dateValue() ?? Date()
+
+                            let challenge = Challenge(
+                                id: challengeID,
+                                title: title,
+                                startDate: startDate,
+                                endDate: endDate,
+                                sponsorID: data["sponsorID"] as? String ?? "",
+                                createdBy: data["createdBy"] as? String ?? "",
+                                assignedAthletes: data["assignedAthletes"] as? [String] ?? [],
+                                eventID: data["eventID"] as? String,
+                                desiredAgeGroups: data["desiredAgeGroups"] as? [String],
+                                type: data["type"] as? String,
+                                logoURL: data["logoURL"] as? String
+                            )
+
+                            DispatchQueue.main.async {
+                                self.loadedChallenge = challenge
+                                self.selectedChallengeID = challenge.id
+                                self.showUploadResultTask = true
                             }
                         }
                 }
