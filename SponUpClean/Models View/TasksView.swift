@@ -19,37 +19,19 @@ struct TasksView: View {
 
     @State private var selectedChallengeID: String? = nil
     @State private var loadedChallenge: Challenge? = nil
-    @State private var showUploadResultTask: Bool = false
-
-    // New navigation states
-    @State private var showAddEvent = false
-    @State private var showAddSponsor = false
-    @State private var showAddSponsorPending = false
+    @State private var challengeTasks: [TaskItem] = []
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    ForEach(tasks) { task in
+                    ForEach(tasks + challengeTasks) { task in
                         Button(action: {
                             task.action()
                         }) {
                             taskCard(task)
                         }
                     }
-
-                    // NavigationLinks triggered by flags
-                    NavigationLink(destination: AddEventCalendarView(), isActive: $showAddEvent) {
-                        EmptyView()
-                    }.hidden()
-
-                    NavigationLink(destination: AddSponsorView(hasApprovedSponsors: .constant(false)), isActive: $showAddSponsor) {
-                        EmptyView()
-                    }.hidden()
-
-                    NavigationLink(destination: AddSponsorView(startOnPending: true, hasApprovedSponsors: .constant(true)), isActive: $showAddSponsorPending) {
-                        EmptyView()
-                    }.hidden()
 
                     NavigationLink(
                         tag: loadedChallenge?.id ?? "",
@@ -61,21 +43,18 @@ struct TasksView: View {
                                 EmptyView()
                             }
                         },
-                        label: {
-                            EmptyView()
-                        }
-                    )
-                    .hidden()
+                        label: { EmptyView() }
+                    ).hidden()
                 }
                 .padding(.vertical)
                 .padding(.horizontal)
             }
-            .navigationTitle("Tasks")
-            .onAppear {
-                self.loadedChallenge = nil
-                self.selectedChallengeID = nil
-                checkForUploadableChallenges()
-            }
+        }
+        .navigationTitle("Tasks")
+        .onAppear {
+            self.loadedChallenge = nil
+            self.selectedChallengeID = nil
+            generateChallengeTasks()
         }
     }
 
@@ -83,78 +62,170 @@ struct TasksView: View {
         var items: [TaskItem] = []
 
         if !hasEvents {
-            items.append(
-                TaskItem(
-                    title: "Add an Event",
-                    description: "Add your next event.",
-                    icon: "calendar.badge.plus",
-                    color: .blue,
-                    action: {
-                        showAddEvent = true
-                    }
-                )
-            )
+            items.append(TaskItem(
+                title: "Add an Event",
+                description: "Add your next event.",
+                icon: "calendar.badge.plus",
+                color: .blue,
+                action: { navigateToView(AnyView(AddEventCalendarView())) }
+            ))
         }
 
         if !hasApprovedSponsors {
-            items.append(
-                TaskItem(
-                    title: "Add a Sponsor",
-                    description: "Add your first sponsor.",
-                    icon: "person.crop.circle.badge.plus",
-                    color: .purple,
-                    action: {
-                        showAddSponsor = true
-                    }
-                )
-            )
+            items.append(TaskItem(
+                title: "Add a Sponsor",
+                description: "Add your first sponsor.",
+                icon: "person.crop.circle.badge.plus",
+                color: .purple,
+                action: { navigateToView(AnyView(AddSponsorView(hasApprovedSponsors: .constant(false)))) }
+            ))
         }
 
         if hasPendingSponsors {
-            items.append(
-                TaskItem(
-                    title: "Pending Sponsor Request",
-                    description: "Approve sponsor connection.",
-                    icon: "person.crop.circle.badge.questionmark",
-                    color: .orange,
-                    action: {
-                        showAddSponsorPending = true
-                    }
-                )
-            )
+            items.append(TaskItem(
+                title: "Pending Sponsor Request",
+                description: "Approve sponsor connection.",
+                icon: "person.crop.circle.badge.questionmark",
+                color: .orange,
+                action: { navigateToView(AnyView(AddSponsorView(startOnPending: true, hasApprovedSponsors: .constant(true)))) }
+            ))
         }
 
         if hasRejectedSubmissions {
-            items.append(
-                TaskItem(
-                    title: "Rejected Submission",
-                    description: "Tap to resubmit your result.",
-                    icon: "tray.and.arrow.up.fill",
-                    color: .red,
-                    action: {
-                        loadFirstRejectedChallenge()
-                    }
-                )
-            )
-        }
-
-        if showUploadResultTask {
-            items.append(
-                TaskItem(
-                    title: "Upload Challenge Result",
-                    description: "Upload your challenge result.",
-                    icon: "tray.and.arrow.up.fill",
-                    color: .green,
-                    action: {
-                        if let challenge = loadedChallenge {
-                            self.selectedChallengeID = challenge.id
-                        }
-                    }
-                )
-            )
+            items.append(TaskItem(
+                title: "Rejected Submission",
+                description: "Tap to resubmit your result.",
+                icon: "tray.and.arrow.up.fill",
+                color: .red,
+                action: { loadFirstRejectedChallenge() }
+            ))
         }
 
         return items
+    }
+
+    private func generateChallengeTasks() {
+        guard let userID = Auth.auth().currentUser?.uid else { return }
+        let db = Firestore.firestore()
+        let now = Date()
+
+        var newTasks: [TaskItem] = []
+        let dispatchGroup = DispatchGroup()
+
+        db.collection("challenges")
+            .whereField("assignedAthletes", arrayContains: userID)
+            .getDocuments { snapshot, error in
+                guard let documents = snapshot?.documents, error == nil else { return }
+
+                for doc in documents {
+                    let data = doc.data()
+                    let id = doc.documentID
+                    let title = data["title"] as? String ?? "Untitled"
+                    let startDate = (data["startDate"] as? Timestamp)?.dateValue() ?? Date()
+                    let endDate = (data["endDate"] as? Timestamp)?.dateValue() ?? Date()
+
+                    let challenge = Challenge.fromFirestore(data, id: id)
+
+                    dispatchGroup.enter()
+
+                    db.collection("submissions")
+                        .whereField("challengeID", isEqualTo: id)
+                        .whereField("athleteID", isEqualTo: userID)
+                        .getDocuments { subSnap, _ in
+                            let hasSubmitted = (subSnap?.documents.count ?? 0) > 0
+                            let dayBefore = Calendar.current.date(byAdding: .day, value: -1, to: startDate) ?? startDate
+                            let fiveDaysAfter = endDate.addingTimeInterval(5 * 86400)
+
+                            // 🟩 NEW CHALLENGE LOGIC
+                            let calendar = Calendar.current
+                            let startOfToday = calendar.startOfDay(for: now)
+                            let startOfChallenge = calendar.startOfDay(for: startDate)
+                            let dayBeforeStart = calendar.date(byAdding: .day, value: -1, to: startOfChallenge)!
+                            let endOfTomorrow = calendar.date(byAdding: .day, value: 1, to: dayBeforeStart)!
+
+                            // 🟢 New Challenge (only if not in "Starts Tomorrow" or "Ongoing")
+                            if now < dayBeforeStart {
+                                newTasks.append(TaskItem(
+                                    title: "New Challenge",
+                                    description: title,
+                                    icon: "flag.circle.fill",
+                                    color: .green,
+                                    action: {
+                                        openChallenge(challenge)
+                                    }
+                                ))
+                            }
+                           
+
+                            // 🟠 Starts Tomorrow
+                            if calendar.isDate(now, inSameDayAs: dayBefore) {
+                                newTasks.append(TaskItem(
+                                    title: "Starts Tomorrow",
+                                    description: title,
+                                    icon: "clock.fill",
+                                    color: .orange,
+                                    action: {
+                                        openChallenge(challenge)
+                                    }
+                                ))
+                            }
+
+                            // 🔵 Ongoing
+                            if now >= startDate && now <= endDate {
+                                newTasks.append(TaskItem(
+                                    title: "Challenge Ongoing",
+                                    description: title,
+                                    icon: "bolt.fill",
+                                    color: .blue,
+                                    action: {
+                                        openChallenge(challenge)
+                                    }
+                                ))
+                            }
+
+                            // 🟣 Upload Result (if late and not submitted)
+                            if now > endDate && now <= fiveDaysAfter && !hasSubmitted {
+                                newTasks.append(TaskItem(
+                                    title: "Upload Challenge Result",
+                                    description: title,
+                                    icon: "tray.and.arrow.up.fill",
+                                    color: .purple,
+                                    action: {
+                                        openChallenge(challenge)
+                                    }
+                                ))
+                            }
+
+                            dispatchGroup.leave()
+                        }
+                }
+
+                dispatchGroup.notify(queue: .main) {
+                    self.challengeTasks = newTasks
+                }
+            }
+    }
+
+
+    private func openChallenge(_ challenge: Challenge) {
+        self.loadedChallenge = challenge
+        self.selectedChallengeID = challenge.id
+    }
+
+    private func navigateToView(_ view: AnyView) {
+        DispatchQueue.main.async {
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = scene.windows.first,
+               let rootVC = window.rootViewController {
+
+                if let nav = rootVC as? UINavigationController {
+                    nav.pushViewController(UIHostingController(rootView: view), animated: true)
+                } else {
+                    let nav = UINavigationController(rootViewController: UIHostingController(rootView: view))
+                    rootVC.present(nav, animated: true)
+                }
+            }
+        }
     }
 
     private func taskCard(_ task: TaskItem) -> some View {
@@ -173,7 +244,6 @@ struct TasksView: View {
                     .font(.subheadline)
                     .fontWeight(.bold)
                     .foregroundColor(.black)
-                    .lineLimit(1)
 
                 Text(task.description)
                     .font(.caption)
@@ -198,7 +268,7 @@ struct TasksView: View {
 
         db.collection("challenges")
             .whereField("assignedAthletes", arrayContains: userID)
-            .getDocuments { snapshot, error in
+            .getDocuments { snapshot, _ in
                 guard let documents = snapshot?.documents else { return }
 
                 for doc in documents {
@@ -213,15 +283,11 @@ struct TasksView: View {
                         .getDocuments { subSnap, _ in
                             guard let _ = subSnap?.documents.first else { return }
 
-                            let title = data["title"] as? String ?? "Untitled"
-                            let startDate = (data["startDate"] as? Timestamp)?.dateValue() ?? Date()
-                            let endDate = (data["endDate"] as? Timestamp)?.dateValue() ?? Date()
-
                             let challenge = Challenge(
                                 id: challengeID,
-                                title: title,
-                                startDate: startDate,
-                                endDate: endDate,
+                                title: data["title"] as? String ?? "Untitled",
+                                startDate: (data["startDate"] as? Timestamp)?.dateValue() ?? Date(),
+                                endDate: (data["endDate"] as? Timestamp)?.dateValue() ?? Date(),
                                 sponsorID: data["sponsorID"] as? String ?? "",
                                 createdBy: data["createdBy"] as? String ?? "",
                                 assignedAthletes: data["assignedAthletes"] as? [String] ?? [],
@@ -234,59 +300,6 @@ struct TasksView: View {
                             DispatchQueue.main.async {
                                 self.loadedChallenge = challenge
                                 self.selectedChallengeID = challenge.id
-                            }
-                        }
-                }
-            }
-    }
-
-    private func checkForUploadableChallenges() {
-        guard let userID = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-        let now = Date()
-
-        db.collection("challenges")
-            .whereField("assignedAthletes", arrayContains: userID)
-            .getDocuments { snapshot, _ in
-                guard let documents = snapshot?.documents else { return }
-
-                for doc in documents {
-                    let data = doc.data()
-                    let challengeID = doc.documentID
-                    let endDate = (data["endDate"] as? Timestamp)?.dateValue() ?? Date()
-                    let fiveDaysAfter = endDate.addingTimeInterval(5 * 86400)
-
-                    guard endDate < now && now <= fiveDaysAfter else { continue }
-
-                    db.collection("submissions")
-                        .whereField("challengeID", isEqualTo: challengeID)
-                        .whereField("athleteID", isEqualTo: userID)
-                        .limit(to: 1)
-                        .getDocuments { subSnap, _ in
-                            let alreadySubmitted = (subSnap?.documents.count ?? 0) > 0
-                            guard !alreadySubmitted else { return }
-
-                            let title = data["title"] as? String ?? "Untitled"
-                            let startDate = (data["startDate"] as? Timestamp)?.dateValue() ?? Date()
-
-                            let challenge = Challenge(
-                                id: challengeID,
-                                title: title,
-                                startDate: startDate,
-                                endDate: endDate,
-                                sponsorID: data["sponsorID"] as? String ?? "",
-                                createdBy: data["createdBy"] as? String ?? "",
-                                assignedAthletes: data["assignedAthletes"] as? [String] ?? [],
-                                eventID: data["eventID"] as? String,
-                                desiredAgeGroups: data["desiredAgeGroups"] as? [String],
-                                type: data["type"] as? String,
-                                logoURL: data["logoURL"] as? String
-                            )
-
-                            DispatchQueue.main.async {
-                                self.loadedChallenge = challenge
-                                self.selectedChallengeID = challenge.id
-                                self.showUploadResultTask = true
                             }
                         }
                 }
