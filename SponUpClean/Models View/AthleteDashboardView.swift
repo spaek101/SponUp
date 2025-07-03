@@ -161,11 +161,13 @@ struct AthleteDashboardView: View {
                             Group {
                                 switch selectedTab {
                                 case .tasks:
+                                    let upcomingEvents = events.filter { $0.endDate >= Date() }
+
                                     TasksView(
                                         hasPendingSponsors: hasPendingSponsors,
-                                        hasEvents: !events.isEmpty,
+                                        hasEvents: !upcomingEvents.isEmpty,
                                         hasApprovedSponsors: hasApprovedSponsors,
-                                        hasRejectedSubmissions: hasRejectedSubmissions  // <-- pass this
+                                        hasRejectedSubmissions: hasRejectedSubmissions
                                     )
 
 

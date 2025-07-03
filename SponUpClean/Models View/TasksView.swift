@@ -20,6 +20,7 @@ struct TasksView: View {
     @State private var selectedChallengeID: String? = nil
     @State private var loadedChallenge: Challenge? = nil
     @State private var challengeTasks: [TaskItem] = []
+    @State private var isPresentingEventView = false
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,7 @@ struct TasksView: View {
                         }
                     }
 
+                    // Navigation to Challenge Detail
                     NavigationLink(
                         tag: loadedChallenge?.id ?? "",
                         selection: $selectedChallengeID,
@@ -45,16 +47,25 @@ struct TasksView: View {
                         },
                         label: { EmptyView() }
                     ).hidden()
+
+                    // Navigation to Add Event View
+                    NavigationLink(
+                        destination: AddEventCalendarView(),
+                        isActive: $isPresentingEventView
+                    ) {
+                        EmptyView()
+                    }
+                    .hidden()
                 }
                 .padding(.vertical)
                 .padding(.horizontal)
             }
-        }
-        .navigationTitle("Tasks")
-        .onAppear {
-            self.loadedChallenge = nil
-            self.selectedChallengeID = nil
-            generateChallengeTasks()
+            .navigationTitle("Tasks")
+            .onAppear {
+                self.loadedChallenge = nil
+                self.selectedChallengeID = nil
+                generateChallengeTasks()
+            }
         }
     }
 
@@ -67,7 +78,9 @@ struct TasksView: View {
                 description: "Add your next event.",
                 icon: "calendar.badge.plus",
                 color: .blue,
-                action: { navigateToView(AnyView(AddEventCalendarView())) }
+                action: {
+                    isPresentingEventView = true
+                }
             ))
         }
 
@@ -136,14 +149,12 @@ struct TasksView: View {
                             let dayBefore = Calendar.current.date(byAdding: .day, value: -1, to: startDate) ?? startDate
                             let fiveDaysAfter = endDate.addingTimeInterval(5 * 86400)
 
-                            // 🟩 NEW CHALLENGE LOGIC
                             let calendar = Calendar.current
                             let startOfToday = calendar.startOfDay(for: now)
                             let startOfChallenge = calendar.startOfDay(for: startDate)
                             let dayBeforeStart = calendar.date(byAdding: .day, value: -1, to: startOfChallenge)!
                             let endOfTomorrow = calendar.date(byAdding: .day, value: 1, to: dayBeforeStart)!
 
-                            // 🟢 New Challenge (only if not in "Starts Tomorrow" or "Ongoing")
                             if now < dayBeforeStart {
                                 newTasks.append(TaskItem(
                                     title: "New Challenge",
@@ -155,9 +166,7 @@ struct TasksView: View {
                                     }
                                 ))
                             }
-                           
 
-                            // 🟠 Starts Tomorrow
                             if calendar.isDate(now, inSameDayAs: dayBefore) {
                                 newTasks.append(TaskItem(
                                     title: "Starts Tomorrow",
@@ -170,7 +179,6 @@ struct TasksView: View {
                                 ))
                             }
 
-                            // 🔵 Ongoing
                             if now >= startDate && now <= endDate {
                                 newTasks.append(TaskItem(
                                     title: "Challenge Ongoing",
@@ -183,7 +191,6 @@ struct TasksView: View {
                                 ))
                             }
 
-                            // 🟣 Upload Result (if late and not submitted)
                             if now > endDate && now <= fiveDaysAfter && !hasSubmitted {
                                 newTasks.append(TaskItem(
                                     title: "Upload Challenge Result",
@@ -205,7 +212,6 @@ struct TasksView: View {
                 }
             }
     }
-
 
     private func openChallenge(_ challenge: Challenge) {
         self.loadedChallenge = challenge
